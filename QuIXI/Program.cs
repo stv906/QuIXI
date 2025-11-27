@@ -20,7 +20,7 @@ namespace QuIXI
             }
 
             // Start logging
-            if (!Logging.start(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), Config.logVerbosity))
+            if (!Logging.start(Config.logFolderPath, Config.logVerbosity))
             {
                 Logging.info("Press ENTER to exit.");
                 Console.ReadLine();

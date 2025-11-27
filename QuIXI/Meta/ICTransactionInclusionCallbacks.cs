@@ -8,19 +8,17 @@ namespace QuIXI.Meta
 {
     internal class ICTransactionInclusionCallbacks : TransactionInclusionCallbacks
     {
-        public void receivedTIVResponse(byte[] txid, bool verified)
+        public void receivedTIVResponse(Transaction tx, bool verified)
         {
-            // TODO implement error
-            // TODO implement blocknum
-            Transaction tx = TransactionCache.getUnconfirmedTransaction(txid);
-            if (tx == null)
-            {
-                return;
-            }
-
             if (!verified)
             {
                 tx.applied = 0;
+                //Node.activityStorage.updateStatus(tx.id, ActivityStatus.Error, 0);
+                return;
+            }
+            else
+            {
+                PendingTransactions.remove(tx.id);
             }
 
             TransactionCache.addTransaction(tx);
@@ -37,11 +35,14 @@ namespace QuIXI.Meta
                 }
             }
             var obj = new Dictionary<string, bool>();
-            obj.Add(Crypto.hashToString(txid), verified);
+            obj.Add(tx.getTxIdString(), verified);
 
             Node.messageQueue.PublishAsync(MQTopics.TransactionStatusUpdate, obj);
 
             IxianHandler.balances.First().lastUpdate = 0;
+
+            //var bh = IxianHandler.getBlockHeader(tx.applied);
+            //Node.activityStorage.updateStatus(tx.id, status, tx.applied, bh.timestamp);
         }
 
         public void receivedBlockHeader(Block block_header, bool verified)

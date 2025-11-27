@@ -11,7 +11,6 @@ using IXICore.Storage;
 using IXICore.Streaming;
 using IXICore.Utils;
 using static IXICore.Transaction;
-using IXICore.Activity;
 
 namespace QuIXI.Meta
 {
@@ -33,8 +32,6 @@ namespace QuIXI.Meta
         private Thread? mainLoopThread;
 
         private bool running = false;
-
-        private bool generatedNewWallet = false;
 
         //public static IActivityStorage activityStorage;
 
@@ -139,19 +136,28 @@ namespace QuIXI.Meta
             byte[] block_checksum = null;
 
             string headers_path;
-            if (IxianHandler.isTestNet)
+            if (Config.headersFolderPath != "")
             {
-                headers_path = Path.Combine(Config.userFolder, "testnet-headers");
+                headers_path = Config.headersFolderPath;
             }
             else
             {
-                headers_path = Path.Combine(Config.userFolder, "headers");
+                if (IxianHandler.networkType == NetworkType.main)
+                {
+                    headers_path = Path.Combine(Config.userFolder, "headers");
+                }
+                else
+                {
+                    headers_path = Path.Combine(Config.userFolder, "testnet-headers");
+                }
+            }
 
+            if (IxianHandler.networkType == NetworkType.main)
+            {
                 block_height = CoreConfig.bakedBlockHeight;
                 block_checksum = CoreConfig.bakedBlockChecksum;
             }
 
-            // TODO: replace the TIV with a liteclient-optimized implementation
             // Start TIV
             tiv.start(headers_path, block_height, block_checksum, true);
 
@@ -410,14 +416,16 @@ namespace QuIXI.Meta
 
         public override bool addTransaction(Transaction tx, List<Address> relayNodeAddresses, bool force_broadcast)
         {
-            // TODO Send to peer if directly connectable
             foreach (var address in relayNodeAddresses)
             {
                 NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, tx.getBytes(true, true), null);
             }
-            //CoreProtocolMessage.broadcastProtocolMessage(new char[] { 'R' }, ProtocolMessageCode.transactionData2, tx.getBytes(true, true), null);
-            PendingTransactions.addPendingLocalTransaction(tx, relayNodeAddresses);
-            return true;
+            if (PendingTransactions.addPendingLocalTransaction(tx, relayNodeAddresses))
+            {
+                //addTransactionToActivityStorage(tx);
+                return true;
+            }
+            return false;
         }
 
         public override Block getLastBlock()
@@ -462,56 +470,66 @@ namespace QuIXI.Meta
 
         public static void processPendingTransactions()
         {
-            // TODO TODO improve to include failed transactions
             ulong last_block_height = IxianHandler.getLastBlockHeight();
             lock (PendingTransactions.pendingTransactions)
             {
-                long cur_time = Clock.getTimestamp();
-                List<PendingTransaction> tmp_pending_transactions = new List<PendingTransaction>(PendingTransactions.pendingTransactions);
-                int idx = 0;
+                long cur_time = Clock.getTimestamp();                
+                List<PendingTransaction> tmp_pending_transactions = new(PendingTransactions.pendingTransactions);
                 foreach (var entry in tmp_pending_transactions)
                 {
+                    long tx_time = entry.addedTimestamp;
+
+                    if (entry.transaction.blockHeight > last_block_height)
+                    {
+                        // not ready yet, syncing to the network
+                        continue;
+                    }
+
                     Transaction t = TransactionCache.getTransaction(entry.transaction.id);
                     if (t == null)
                     {
                         t = entry.transaction;
                     }
-                    long tx_time = entry.addedTimestamp;
-
-                    if (t.applied != 0)
+                    else
                     {
-                        PendingTransactions.pendingTransactions.RemoveAll(x => x.transaction.id.SequenceEqual(t.id));
-                        continue;
+                        if (t.applied != 0)
+                        {
+                            PendingTransactions.pendingTransactions.RemoveAll(x => x.transaction.id.SequenceEqual(t.id));
+                            continue;
+                        }
                     }
 
                     // if transaction expired, remove it from pending transactions
-                    if (last_block_height > ConsensusConfig.getRedactedWindowSize() && t.blockHeight < last_block_height - ConsensusConfig.getRedactedWindowSize())
+                    if (last_block_height > ConsensusConfig.getRedactedWindowSize()
+                        && t.blockHeight < last_block_height - ConsensusConfig.getRedactedWindowSize())
                     {
-                        Logging.error("Error sending the transaction {0}", t.getTxIdString());
+                        Logging.error("Error sending the transaction {0}, expired", t.getTxIdString());
+                        //activityStorage.updateStatus(t.id, ActivityStatus.Error, 0);
                         PendingTransactions.pendingTransactions.RemoveAll(x => x.transaction.id.SequenceEqual(t.id));
                         continue;
                     }
 
-                    if (cur_time - tx_time > 40) // if the transaction is pending for over 40 seconds, resend
+                    if (entry.rejectedNodeList.Count() > 3
+                        && entry.rejectedNodeList.Count() > entry.confirmedNodeList.Count())
                     {
+                        Logging.error("Error sending the transaction {0}, rejected", t.getTxIdString());
+                        //activityStorage.updateStatus(t.id, ActivityStatus.Error, 0);
+                        PendingTransactions.pendingTransactions.RemoveAll(x => x.transaction.id.SequenceEqual(t.id));
+                        continue;
+                    }
+
+                    if (cur_time - tx_time > 60) // if the transaction is pending for over 60 seconds, resend
+                    {
+                        Logging.warn("Transaction {0} pending for a while, resending", t.getTxIdString());
                         foreach (var address in entry.relayNodeAddresses)
                         {
                             NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, t.getBytes(true, true), null);
                         }
-                        entry.addedTimestamp = cur_time;
-                    }
-
-                    if (entry.confirmedNodeList.Count() >= 2) // already received 2+ feedback
-                    {
-                        continue;
-                    }
-
-                    if (cur_time - tx_time > 30) // if the transaction is pending for over 30 seconds, send inquiry
-                    {
                         CoreProtocolMessage.broadcastGetTransaction(t.id, 0);
+                        entry.addedTimestamp = cur_time;
+                        entry.confirmedNodeList.Clear();
+                        entry.rejectedNodeList.Clear();
                     }
-
-                    idx++;
                 }
             }
         }
@@ -662,9 +680,13 @@ namespace QuIXI.Meta
         // Cleans the storage cache and logs
         public static bool cleanCacheAndLogs()
         {
-            //activityStorage.stopStorage();
-            //activityStorage.deleteData();
-            //activityStorage.prepareStorage(false);
+            /*if (activityStorage is null)
+            {
+                activityStorage = new ActivityStorage(Config.activityFolderPath, 32 << 20, 0);
+            }
+            activityStorage.stopStorage();
+            activityStorage.deleteData();
+            activityStorage.prepareStorage(false);*/
 
             PeerStorage.deletePeersFile();
 
@@ -703,7 +725,6 @@ namespace QuIXI.Meta
                     }
                 }
                 walletStorage.generateWallet(password);
-                generatedNewWallet = true;
             }
             else
             {
