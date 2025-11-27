@@ -10,7 +10,7 @@ namespace QuIXI.Meta
     public class Config
     {
         // Read-only values
-        public static readonly string version = "qxc-0.9.1b";
+        public static readonly string version = "qxc-0.9.1c";
 
         public static readonly string checkVersionUrl = "https://resources.ixian.io/qxc-update.txt";
         public static readonly int checkVersionSeconds = 6 * 60 * 60; // 6 hours
