@@ -289,7 +289,8 @@ namespace QuIXI.Meta
 
                     if (presence != null)
                     {
-                        if (friend.online == false)
+                        if (friend.online == false
+                            && friend.relayNode != null)
                         {
                             friend.online = true;
                             messageQueue.PublishAsync(MQTopics.FriendStatusUpdate, friend);

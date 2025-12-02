@@ -437,9 +437,13 @@ namespace QuIXI.Network
             if (f != null)
             {
                 var pa = p.addresses[0];
-                // TODO use actual wallet address once Presence hostname contains such address
-                f.relayNode = new Peer(pa.address, null, pa.lastSeenTime, 0, 0, 0);
-                f.updatedStreamingNodes = pa.lastSeenTime;
+                if (f.lastSeenTime < pa.lastSeenTime)
+                {
+                    // TODO use actual wallet address once Presence hostname contains such address
+                    f.relayNode = new Peer(pa.address, null, pa.lastSeenTime, 0, 0, 0);
+                    f.updatedStreamingNodes = pa.lastSeenTime;
+                    f.lastSeenTime = pa.lastSeenTime;
+                }
             }
         }
 
@@ -464,9 +468,13 @@ namespace QuIXI.Network
             if (f != null)
             {
                 var pa = p.addresses[0];
-                // TODO use actual wallet address once Presence hostname contains such address
-                f.relayNode = new Peer(pa.address, null, pa.lastSeenTime, 0, 0, 0);
-                f.updatedStreamingNodes = pa.lastSeenTime;
+                if (f.lastSeenTime < pa.lastSeenTime)
+                {
+                    // TODO use actual wallet address once Presence hostname contains such address
+                    f.relayNode = new Peer(pa.address, null, pa.lastSeenTime, 0, 0, 0);
+                    f.updatedStreamingNodes = pa.lastSeenTime;
+                    f.lastSeenTime = pa.lastSeenTime;
+                }
             }
         }
 
@@ -538,7 +546,7 @@ namespace QuIXI.Network
             var friends = FriendList.getFriendsBySectorPrefix(prefix);
             foreach (var friend in friends)
             {
-                friend.updatedSectorNodes = Clock.getNetworkTimestamp();
+                friend.updatedSectorNodes = Clock.getTimestamp();
                 friend.sectorNodes = peers;
             }
         }

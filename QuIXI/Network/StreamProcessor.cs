@@ -15,7 +15,7 @@ namespace QuIXI.Network
         }
 
         // Called when receiving S2 data from clients
-        public override ReceiveDataResponse receiveData(byte[] bytes, RemoteEndpoint endpoint, bool fireLocalNotification = true)
+        public override ReceiveDataResponse receiveData(byte[] bytes, RemoteEndpoint endpoint, bool fireLocalNotification = true, bool alert = true)
         {
             ReceiveDataResponse rdr = base.receiveData(bytes, endpoint, fireLocalNotification);
             if (rdr == null)
