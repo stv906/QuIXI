@@ -572,7 +572,7 @@ namespace QuIXI.Meta
 
                 if (!friend.online)
                 {
-                    StreamProcessor.fetchFriendsPresence(friend);
+                    StreamProcessor.fetchFriendsPresence(friend, true);
                 }
 
                 // Check if the message was sent before the friend was added to the contact list
