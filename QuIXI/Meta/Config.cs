@@ -10,7 +10,7 @@ namespace QuIXI.Meta
     public class Config
     {
         // Read-only values
-        public static readonly string version = "qxc-0.9.1c";
+        public static readonly string version = "qxc-0.9.2";
 
         public static readonly string checkVersionUrl = "https://resources.ixian.io/qxc-update.txt";
         public static readonly int checkVersionSeconds = 6 * 60 * 60; // 6 hours
@@ -27,7 +27,7 @@ namespace QuIXI.Meta
         public static int apiPort = 8001;
         public static int serverPort = 0;
 
-        public static string userFolder = "";
+        public static string dataFolder = Path.Combine(Environment.CurrentDirectory, "data");
 
         public static Dictionary<string, string> apiUsers = new Dictionary<string, string>();
 
@@ -35,15 +35,15 @@ namespace QuIXI.Meta
         public static List<string> apiBinds = new List<string>();
 
         public static string configFilename = "ixian.cfg";
-        public static string walletFile = "ixian.wal";
+        public static string walletFile = "";
 
-        public static string headersFolderPath = Path.Combine(Environment.CurrentDirectory, "headers");
-        public static string logFolderPath = Environment.CurrentDirectory;
+        public static string headersFolderPath = "";
+        public static string logFolderPath = "";
 
         public static int maxLogSize = 50;
         public static int maxLogCount = 10;
 
-        public static int logVerbosity = (int)LogSeverity.info + (int)LogSeverity.warn + (int)LogSeverity.error;
+        public static int logVerbosity = (int)LogSeverity.info + (int)LogSeverity.warn + (int)LogSeverity.error + (int)LogSeverity.trace;
         public static bool verboseOutput = false;
 
         public static bool onlyShowAddresses = false;
@@ -102,6 +102,7 @@ namespace QuIXI.Meta
             Console.WriteLine("    --networkType\t mainnet, testnet or regtest.");
             Console.WriteLine("    --logFolderPath\t location where to store log files.");
             Console.WriteLine("    --headersFolderPath\t location where to store block header data.");
+            Console.WriteLine("    --dataFolderPath\t root location where to store data.");
             Console.WriteLine("");
             Console.WriteLine("    --name\t\t Specify the name of this QuIXI instance");
             Console.WriteLine("");
@@ -128,6 +129,11 @@ namespace QuIXI.Meta
             Console.WriteLine("    logVerbosity\t Sets log verbosity (same as --logVerbosity CLI)");
             Console.WriteLine("    logFolderPath\t location where to store log files.");
             Console.WriteLine("    headersFolderPath\t location where to store block header data.");
+            Console.WriteLine("    dataFolderPath\t root location where to store data.");
+            Console.WriteLine("    checksumLock\t Sets the checksum lock for seeding checksums - useful for custom networks.");
+            Console.WriteLine("    networkType\t\t mainnet, testnet or regtest.");
+            Console.WriteLine("    wallet\t\t Specify location of the ixian.wal file");
+            Console.WriteLine("    walletPassword\t Specify the password for the wallet.");
             Console.WriteLine("");
             Console.WriteLine("    mqDriver\t\t Message Queue Driver - mqtt or rabbitmq");
             Console.WriteLine("    mqHost\t\t Message Queue Hostname");
@@ -141,7 +147,6 @@ namespace QuIXI.Meta
         private static void outputVersion()
         {
             // Do nothing but exit since version is the first thing displayed
-
             Environment.Exit(0);
         }
 
@@ -288,6 +293,15 @@ namespace QuIXI.Meta
                     case "headersFolderPath":
                         headersFolderPath = value;
                         break;
+                    case "dataFolderPath":
+                        dataFolder = value;
+                        break;
+                    case "wallet":
+                        walletFile = value;
+                        break;
+                    case "walletPassword":
+                        dangerCommandlinePasswordCleartextUnsafe = value;
+                        break;
                     default:
                         // unknown key
                         Logging.warn("Unknown config parameter was specified '" + key + "'");
@@ -295,13 +309,17 @@ namespace QuIXI.Meta
                 }
             }
         }
-        public static bool init(string[] args)
+
+        public static void init(string[] args)
         {
             // first pass
             var cmd_parser = new FluentCommandLineParser();
 
             // help
             cmd_parser.SetupHelp("h", "help").Callback(text => outputHelp());
+
+            // version
+            cmd_parser.Setup<bool>('v', "version").Callback(text => outputVersion());
 
             // config file
             cmd_parser.Setup<string>("config").Callback(value => configFilename = value).Required();
@@ -329,9 +347,6 @@ namespace QuIXI.Meta
 
             bool start_clean = false; // Flag to determine if node should delete cache+logs
 
-            // version
-            cmd_parser.Setup<bool>('v', "version").Callback(text => outputVersion());
-
             // Check for password change
             cmd_parser.Setup<bool>('x', "changepass").Callback(value => changePass = value).Required();
 
@@ -357,6 +372,8 @@ namespace QuIXI.Meta
             cmd_parser.Setup<string>("headersFolderPath").Callback(value => headersFolderPath = value).Required();
 
             cmd_parser.Setup<string>("logFolderPath").Callback(value => logFolderPath = value).Required();
+
+            cmd_parser.Setup<string>("dataFolderPath").Callback(value => dataFolder = value).Required();
 
             // Debug
 
@@ -397,7 +414,27 @@ namespace QuIXI.Meta
                 }
             }
 
-            return true;
+            if (headersFolderPath == "")
+            {
+                if (IxianHandler.networkType == NetworkType.main)
+                {
+                    headersFolderPath = Path.Combine(dataFolder, "headers");
+                }
+                else
+                {
+                    headersFolderPath = Path.Combine(dataFolder, "testnet-headers");
+                }
+            }
+
+            if (logFolderPath == "")
+            {
+                logFolderPath = dataFolder;
+            }
+
+            if (walletFile == "")
+            {
+                walletFile = Path.Combine(dataFolder, "ixian.wal");
+            }
         }
     }
 }

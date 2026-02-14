@@ -58,14 +58,14 @@ namespace QuIXI.Meta
 
             initMessageQueue();
 
-            PeerStorage.init(Config.userFolder);
+            PeerStorage.init(Config.dataFolder);
 
             // Network configuration
             networkClientManagerStatic = new NetworkClientManagerStatic(Config.maxRelaySectorNodesToConnectTo);
             NetworkClientManager.init(networkClientManagerStatic);
 
             // Prepare the stream processor
-            streamProcessor = new StreamProcessor(new ICPendingMessageProcessor(Config.userFolder, false), Config.streamCapabilities);
+            streamProcessor = new StreamProcessor(new ICPendingMessageProcessor(Config.dataFolder, false), Config.streamCapabilities);
 
             // Init TIV
             tiv = new TransactionInclusion(new ICTransactionInclusionCallbacks(), false);
@@ -73,9 +73,9 @@ namespace QuIXI.Meta
             Logging.info("Initing local storage");
 
             // Prepare the local storage
-            IxianHandler.localStorage = new LocalStorage(Config.userFolder, new ICLocalStorageCallbacks());
+            IxianHandler.localStorage = new LocalStorage(Config.dataFolder, new ICLocalStorageCallbacks());
 
-            FriendList.init(Config.userFolder);
+            FriendList.init(Config.dataFolder);
 
             UpdateVerify.init(Config.checkVersionUrl, Config.checkVersionSeconds);
 
@@ -135,22 +135,6 @@ namespace QuIXI.Meta
             ulong block_height = 0;
             byte[] block_checksum = null;
 
-            string headers_path;
-            if (Config.headersFolderPath != "")
-            {
-                headers_path = Config.headersFolderPath;
-            }
-            else
-            {
-                if (IxianHandler.networkType == NetworkType.main)
-                {
-                    headers_path = Path.Combine(Config.userFolder, "headers");
-                }
-                else
-                {
-                    headers_path = Path.Combine(Config.userFolder, "testnet-headers");
-                }
-            }
 
             if (IxianHandler.networkType == NetworkType.main)
             {
@@ -159,7 +143,7 @@ namespace QuIXI.Meta
             }
 
             // Start TIV
-            tiv.start(headers_path, block_height, block_checksum, true);
+            tiv.start(Config.headersFolderPath, block_height, block_checksum, true);
 
             // Generate presence list
             PresenceList.init(IxianHandler.publicIP, 0, 'C', CoreConfig.clientKeepAliveInterval);

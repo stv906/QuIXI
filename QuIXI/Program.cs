@@ -19,6 +19,17 @@ namespace QuIXI
                 Console.Clear();
             }
 
+            ConsoleHelpers.prepareWindowsConsole();
+
+            ConsoleHelpers.verboseConsoleOutput = true;
+
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine(string.Format("QuIXI {0} ({1})", Config.version, CoreConfig.version));
+            Console.ResetColor();
+
+            // Read configuration from command line
+            Config.init(args);
+
             // Start logging
             if (!Logging.start(Config.logFolderPath, Config.logVerbosity))
             {
@@ -44,13 +55,6 @@ namespace QuIXI
 
         static bool onStart(string[] args)
         {
-            // Read configuration from command line
-            if (!Config.init(args))
-            {
-                Environment.Exit(2);
-                return false;
-            }
-
             // Set the logging options
             Logging.setOptions(Config.maxLogSize, Config.maxLogCount);
             Logging.flush();
