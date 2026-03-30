@@ -50,13 +50,18 @@ namespace QuIXI.MQ
         public static readonly string GetAppProtocols = "GetAppProtocols";
         public static readonly string AppProtocols = "AppProtocols";
         public static readonly string AppProtocolData = "AppProtocolData";
+        public static readonly string TransactionRequest = "TransactionRequest";
+        public static readonly string TransactionSendRequest = "TransactionSendRequest";
+        public static readonly string TransactionSendResponse = "TransactionSendResponse";
 
         // Misc Messages
         public static readonly string FriendStatusUpdate = "FriendStatusUpdate";
         public static readonly string MessageSent = "MessageSent";
         public static readonly string MessageExpired = "MessageExpired";
+        public static readonly string Transaction = "Transaction";
         public static readonly string TransactionStatusUpdate = "TransactionStatusUpdate";
-        
+        public static readonly string BlockReorg = "BlockReorg";
+        public static readonly string BlockHeader = "BlockHeader";
 
         // Raw out
     }

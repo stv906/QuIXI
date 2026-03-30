@@ -16,15 +16,15 @@ It provides:
 * 📨 **Message Queue Bridges** - Subscribe to Ixian P2P streams via **MQTT** or **RabbitMQ**
 * 🌐 **REST API** - Send messages, app data, or service commands into Ixian
 * 🔒 **Encryption by Default** - All communication is protected by Ixian Core's cryptography
-* 📦 **Lightweight & Portable** - Runs anywhere .NET 8 is supported, from servers to Raspberry Pi
+* 📦 **Lightweight & Portable** - Runs anywhere .NET 10 is supported, from servers to Raspberry Pi
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Install .NET 8
+### 1. Install .NET 10
 
-QuIXI requires [.NET 8 SDK & Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0).
+QuIXI requires [.NET 10 SDK & Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 
 ### 2. Clone & Build
 

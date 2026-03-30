@@ -85,7 +85,7 @@ namespace QuIXI
 
             Address address = new Address((string)parameters["address"]);
             var contactName = address.ToString();
-            Friend friend = FriendList.addFriend(FriendState.RequestSent, address, null, contactName, null, null, 0);
+            Friend friend = FriendList.addFriend(FriendType.Normal, FriendState.RequestSent, address, null, contactName, null, null, 0);
 
             if (friend != null)
             {
@@ -242,6 +242,7 @@ namespace QuIXI
 
         private JsonResponse onSendAppData(Dictionary<string, object> parameters)
         {
+            // TOOD Add multi addresses
             JsonError error = null;
 
             if (!parameters.ContainsKey("address"))

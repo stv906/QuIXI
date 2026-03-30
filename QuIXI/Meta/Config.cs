@@ -4,13 +4,14 @@ using IXICore.Meta;
 using IXICore.Network;
 using IXICore.Streaming;
 using System.Text;
+using IXICore;
 
 namespace QuIXI.Meta
 {
     public class Config
     {
         // Read-only values
-        public static readonly string version = "qxc-0.9.2";
+        public static readonly string version = "qxc-0.9.2-dev";
 
         public static readonly string checkVersionUrl = "https://resources.ixian.io/qxc-update.txt";
         public static readonly int checkVersionSeconds = 6 * 60 * 60; // 6 hours
@@ -29,6 +30,10 @@ namespace QuIXI.Meta
 
         public static string dataFolder = Path.Combine(Environment.CurrentDirectory, "data");
 
+        public static string activityFolderPath = "";
+        public static string headersFolderPath = "";
+        public static string logFolderPath = "";
+
         public static Dictionary<string, string> apiUsers = new Dictionary<string, string>();
 
         public static List<string> apiAllowedIps = new List<string>();
@@ -36,9 +41,6 @@ namespace QuIXI.Meta
 
         public static string configFilename = "ixian.cfg";
         public static string walletFile = "";
-
-        public static string headersFolderPath = "";
-        public static string logFolderPath = "";
 
         public static int maxLogSize = 50;
         public static int maxLogCount = 10;
@@ -63,13 +65,19 @@ namespace QuIXI.Meta
 
         // Message Queue Service settings
         public static MqDrivers mqDriver = MqDrivers.None;
-        public static string mqHost = null;
+        public static string? mqHost = null;
         public static int mqPort = 0;
 
         // expose own external IP:Port to PL
         public static bool exposePublicIP = false;
 
         public static StreamCapabilities streamCapabilities = StreamCapabilities.Incoming | StreamCapabilities.AppProtocols;
+
+        public static ulong activityDbCacheSize = 8 << 20;
+        public static ulong blocksDbCacheSize = 8 << 20;
+
+        public static TIVBlockVerificationMode blockVerificationMode = TIVBlockVerificationMode.Signatures;
+        public static bool disableBlockPruning = false;
 
         private Config()
         {
@@ -81,33 +89,39 @@ namespace QuIXI.Meta
             Console.WriteLine("Starts a new instance of QuIXI");
             Console.WriteLine("");
             Console.WriteLine(" QuIXI.exe [-h] [-v] [-t] [-x] [-c] [-a 8001] [-i ip] [-w ixian.wal] [-n seed1.ixian.io:10234]");
-            Console.WriteLine(" [--config ixian.cfg] [--maxLogSize 50] [--maxLogCount 10]  [--logVerbosity 14]");
-            Console.WriteLine(" [--walletPassword] [--checksumLock Ixian] [--verboseOutput]");
+            Console.WriteLine(" [--config ixian.cfg] [--maxLogSize 50] [--maxLogCount 10] [--logVerbosity 14]");
+            Console.WriteLine(" [--checksumLock Ixian] [--verboseOutput]");
             Console.WriteLine("");
-            Console.WriteLine("    -h\t\t\t Displays this help");
-            Console.WriteLine("    -v\t\t\t Displays version");
-            Console.WriteLine("    -t\t\t\t Starts node in testnet mode");
-            Console.WriteLine("    -x\t\t\t Change password of an existing wallet");
-            Console.WriteLine("    -c\t\t\t Removes cache, peers.dat and ixian.log files before starting");
-            Console.WriteLine("    -a\t\t\t HTTP/API port to listen on");
-            Console.WriteLine("    -i\t\t\t External IP Address to use");
-            Console.WriteLine("    -w\t\t\t Specify location of the ixian.wal file");
-            Console.WriteLine("    -n\t\t\t Specify which seed node to use");
-            Console.WriteLine("    --config\t\t Specify config filename (default ixian.cfg)");
-            Console.WriteLine("    --maxLogSize\t Specify maximum log file size in MB");
-            Console.WriteLine("    --maxLogCount\t Specify maximum number of log files");
-            Console.WriteLine("    --logVerbosity\t Sets log verbosity (0 = none, trace = 1, info = 2, warn = 4, error = 8)");
-            Console.WriteLine("    --checksumLock\t Sets the checksum lock for seeding checksums - useful for custom networks.");
-            Console.WriteLine("    --verboseOutput\t Starts node with verbose output.");
-            Console.WriteLine("    --networkType\t mainnet, testnet or regtest.");
-            Console.WriteLine("    --logFolderPath\t location where to store log files.");
-            Console.WriteLine("    --headersFolderPath\t location where to store block header data.");
-            Console.WriteLine("    --dataFolderPath\t root location where to store data.");
+            Console.WriteLine("    -h\t\t\t\t Displays this help");
+            Console.WriteLine("    -v\t\t\t\t Displays version");
+            Console.WriteLine("    -t\t\t\t\t Starts node in testnet mode");
+            Console.WriteLine("    -x\t\t\t\t Change password of an existing wallet");
+            Console.WriteLine("    -c\t\t\t\t Removes cache, peers.dat and ixian.log files before starting");
+            Console.WriteLine("    -a\t\t\t\t HTTP/API port to listen on");
+            Console.WriteLine("    -i\t\t\t\t External IP Address to use");
+            Console.WriteLine("    -w\t\t\t\t Specify location of the ixian.wal file");
+            Console.WriteLine("    -n\t\t\t\t Specify which seed node to use");
+            Console.WriteLine("    --config\t\t\t Specify config filename (default ixian.cfg)");
+            Console.WriteLine("    --maxLogSize\t\t Specify maximum log file size in MB");
+            Console.WriteLine("    --maxLogCount\t\t Specify maximum number of log files");
+            Console.WriteLine("    --logVerbosity\t\t Sets log verbosity (0 = none, trace = 1, info = 2, warn = 4, error = 8)");
+            Console.WriteLine("    --checksumLock\t\t Sets the checksum lock for seeding checksums - useful for custom networks.");
+            Console.WriteLine("    --verboseOutput\t\t Starts node with verbose output.");
+            Console.WriteLine("    --networkType\t\t Network type - mainnet, testnet or regtest.");
+            Console.WriteLine("    --logFolderPath\t\t Location where to store log files.");
+            Console.WriteLine("    --headersFolderPath\t\t Location where to store block header data.");
+            Console.WriteLine("    --activityFolderPath\t Location where to store activity files.");
+            Console.WriteLine("    --dataFolderPath\t\t Root location where to store data.");
+            Console.WriteLine("    --blocksDbCache\t\t Max RAM in bytes to use for RocksDB Blocks Cache.");
+            Console.WriteLine("    --activityDbCache\t\t Max RAM in bytes to use for Activity Cache.");
+            Console.WriteLine("    --p2pTxMode\t\t\t P2P Transaction Mode (primaryAddress or custom)");
+            Console.WriteLine("    --blockVerificationMode\t Block verification mode - minimal, pocw, signatures, transactions");
+            Console.WriteLine("    --disableBlockPruning\t\t Disable block pruning");
             Console.WriteLine("");
-            Console.WriteLine("    --name\t\t Specify the name of this QuIXI instance");
+            Console.WriteLine("    --name\t\t\t Specify the name of this QuIXI instance");
             Console.WriteLine("");
             Console.WriteLine("----------- Developer CLI flags -----------");
-            Console.WriteLine("    --walletPassword\t Specify the password for the wallet.");
+            Console.WriteLine("    --walletPassword\t\t Specify the password for the wallet.");
             Console.WriteLine("");
             Console.WriteLine("----------- Config File Options -----------");
             Console.WriteLine(" Config file options should use parameterName = parameterValue semantics.");
@@ -115,31 +129,36 @@ namespace QuIXI.Meta
             Console.WriteLine("    apiPort = 8001");
             Console.WriteLine("");
             Console.WriteLine(" Available options:");
-            Console.WriteLine("    apiPort\t\t HTTP/API port to listen on (same as -a CLI)");
-            Console.WriteLine("    apiAllowIp\t\t Allow API connections from specified source or sources (can be used multiple times)");
-            Console.WriteLine("    apiBind\t\t Bind to given address to listen for API connections (can be used multiple times)");
-            Console.WriteLine("    testnetApiPort\t HTTP/API port to listen on in testnet mode (same as -a CLI)");
-            Console.WriteLine("    addApiUser\t\t Adds user:password that can access the API (can be used multiple times)");
+            Console.WriteLine("    apiPort\t\t\t HTTP/API port to listen on (same as -a CLI)");
+            Console.WriteLine("    apiAllowIp\t\t\t Allow API connections from specified source or sources (can be used multiple times)");
+            Console.WriteLine("    apiBind\t\t\t Bind to given address to listen for API connections (can be used multiple times)");
+            Console.WriteLine("    addApiUser\t\t\t Adds user:password that can access the API (can be used multiple times)");
 
-            Console.WriteLine("    externalIp\t\t External IP Address to use (same as -i CLI)");
-            Console.WriteLine("    addPeer\t\t Specify which seed node to use (same as -n CLI) (can be used multiple times)");
-            Console.WriteLine("    addTestnetPeer\t Specify which seed node to use in testnet mode (same as -n CLI) (can be used multiple times)");
-            Console.WriteLine("    maxLogSize\t\t Specify maximum log file size in MB (same as --maxLogSize CLI)");
-            Console.WriteLine("    maxLogCount\t\t Specify maximum number of log files (same as --maxLogCount CLI)");
-            Console.WriteLine("    logVerbosity\t Sets log verbosity (same as --logVerbosity CLI)");
-            Console.WriteLine("    logFolderPath\t location where to store log files.");
-            Console.WriteLine("    headersFolderPath\t location where to store block header data.");
-            Console.WriteLine("    dataFolderPath\t root location where to store data.");
-            Console.WriteLine("    checksumLock\t Sets the checksum lock for seeding checksums - useful for custom networks.");
-            Console.WriteLine("    networkType\t\t mainnet, testnet or regtest.");
-            Console.WriteLine("    wallet\t\t Specify location of the ixian.wal file");
-            Console.WriteLine("    walletPassword\t Specify the password for the wallet.");
+            Console.WriteLine("    externalIp\t\t\t External IP Address to use (same as -i CLI)");
+            Console.WriteLine("    addPeer\t\t\t Specify which seed node to use (same as -n CLI) (can be used multiple times)");
+            Console.WriteLine("    addTestnetPeer\t\t Specify which seed node to use in testnet mode (same as -n CLI) (can be used multiple times)");
+            Console.WriteLine("    maxLogSize\t\t\t Specify maximum log file size in MB (same as --maxLogSize CLI)");
+            Console.WriteLine("    maxLogCount\t\t\t Specify maximum number of log files (same as --maxLogCount CLI)");
+            Console.WriteLine("    logVerbosity\t\t Sets log verbosity (same as --logVerbosity CLI)");
+            Console.WriteLine("    logFolderPath\t\t Location where to store log files.");
+            Console.WriteLine("    headersFolderPath\t\t Location where to store block header data.");
+            Console.WriteLine("    activityFolderPath\t\t Location where to store activity files.");
+            Console.WriteLine("    dataFolderPath\t\t Root location where to store data.");
+            Console.WriteLine("    checksumLock\t\t Sets the checksum lock for seeding checksums - useful for custom networks.");
+            Console.WriteLine("    networkType\t\t\t Network type - mainnet, testnet or regtest.");
+            Console.WriteLine("    blocksDbCache\t\t Max RAM in bytes to use for RocksDB Blocks Cache.");
+            Console.WriteLine("    activityDbCache\t\t Max RAM in bytes to use for Activity Cache.");
+            Console.WriteLine("    wallet\t\t\t Specify location of the ixian.wal file");
+            Console.WriteLine("    walletPassword\t\t Specify the password for the wallet.");
+            Console.WriteLine("    p2pTxMode\t\t\t P2P Transaction Mode (primaryAddress or custom)");
+            Console.WriteLine("    blockVerificationMode\t Block verification mode - minimal, pocw, signatures, transactions");
+            Console.WriteLine("    disableBlockPruning\t\t Disable block pruning");
             Console.WriteLine("");
-            Console.WriteLine("    mqDriver\t\t Message Queue Driver - mqtt or rabbitmq");
-            Console.WriteLine("    mqHost\t\t Message Queue Hostname");
-            Console.WriteLine("    mqPort\t\t Message Queue port");
-            Console.WriteLine("    streamCapabilities\t Stream capabilities - Incoming, Outgoing, IPN, Apps, AppProtocols");
-            Console.WriteLine("    name\t\t Specify the name of this QuIXI instance");
+            Console.WriteLine("    mqDriver\t\t\t Message Queue Driver - mqtt or rabbitmq");
+            Console.WriteLine("    mqHost\t\t\t Message Queue Hostname");
+            Console.WriteLine("    mqPort\t\t\t Message Queue port");
+            Console.WriteLine("    streamCapabilities\t\t Stream capabilities (Incoming = 1, Outgoing = 2, IPN = 4, Apps = 8, AppProtocols = 16)");
+            Console.WriteLine("    name\t\t\t Specify the name of this QuIXI instance");
 
             Environment.Exit(0);
         }
@@ -190,6 +209,48 @@ namespace QuIXI.Meta
                     throw new Exception(string.Format("Unknown Message Queue Driver '{0}'. Possible values are 'none', 'mqtt', 'rabbitmq'", value));
             }
             return mqDriver;
+        }
+
+        private static P2PTransactionMode parseP2PTxModeValue(string value)
+        {
+            P2PTransactionMode txMode;
+            value = value.ToLower();
+            switch (value)
+            {
+                case "primaryAddress":
+                    txMode = P2PTransactionMode.PrimaryAddress;
+                    break;
+                case "custom":
+                    txMode = P2PTransactionMode.Custom;
+                    break;
+                default:
+                    throw new Exception(string.Format("Unknown P2P Transaction Mode '{0}'. Possible values are 'primaryAddress', 'custom'", value));
+            }
+            return txMode;
+        }
+
+        private static TIVBlockVerificationMode parseBlockVerificationMode(string value)
+        {
+            TIVBlockVerificationMode verificationMode;
+            value = value.ToLower();
+            switch (value)
+            {
+                case "minimal":
+                    verificationMode = TIVBlockVerificationMode.Minimal;
+                    break;
+                case "pocw":
+                    verificationMode = TIVBlockVerificationMode.PoCW;
+                    break;
+                case "signatures":
+                    verificationMode = TIVBlockVerificationMode.Signatures;
+                    break;
+                case "transactions":
+                    verificationMode = TIVBlockVerificationMode.Transactions;
+                    break;
+                default:
+                    throw new Exception(string.Format("Unknown Block Verification Mode '{0}'. Possible values are 'minimal', 'pocw', 'signatures', 'transactions'", value));
+            }
+            return verificationMode;
         }
 
         private static void readConfigFile(string filename)
@@ -281,7 +342,7 @@ namespace QuIXI.Meta
                     case "mqPort":
                         mqPort = int.Parse(value);
                         break;
-                    case "streamCapabilites":
+                    case "streamCapabilities":
                         streamCapabilities = (StreamCapabilities)int.Parse(value);
                         break;
                     case "name":
@@ -289,6 +350,9 @@ namespace QuIXI.Meta
                         break;
                     case "logFolderPath":
                         logFolderPath = value;
+                        break;
+                    case "activityFolderPath":
+                        activityFolderPath = value;
                         break;
                     case "headersFolderPath":
                         headersFolderPath = value;
@@ -301,6 +365,21 @@ namespace QuIXI.Meta
                         break;
                     case "walletPassword":
                         dangerCommandlinePasswordCleartextUnsafe = value;
+                        break;
+                    case "blocksDbCache":
+                        blocksDbCacheSize = ulong.Parse(value);
+                        break;
+                    case "activityDbCache":
+                        activityDbCacheSize = ulong.Parse(value);
+                        break;
+                    case "p2pTxMode":
+                        CoreConfig.p2pTransactionMode = parseP2PTxModeValue(value);
+                        break;
+                    case "blockVerificationMode":
+                        blockVerificationMode = parseBlockVerificationMode(value);
+                        break;
+                    case "disableBlockPruning":
+                        disableBlockPruning = value.ToLower() == "true" || value == "1";
                         break;
                     default:
                         // unknown key
@@ -367,13 +446,29 @@ namespace QuIXI.Meta
 
             cmd_parser.Setup<bool>("onlyShowAddresses").Callback(value => onlyShowAddresses = true).Required();
 
-            cmd_parser.Setup<string>("name").Callback(value => friendlyName = value).Required();
+            cmd_parser.Setup<string>("checksumLock").Callback(value => checksumLock = Encoding.UTF8.GetBytes(value)).Required();
+
+            cmd_parser.Setup<string>("activityFolderPath").Callback(value => activityFolderPath = value).Required();
 
             cmd_parser.Setup<string>("headersFolderPath").Callback(value => headersFolderPath = value).Required();
 
             cmd_parser.Setup<string>("logFolderPath").Callback(value => logFolderPath = value).Required();
 
             cmd_parser.Setup<string>("dataFolderPath").Callback(value => dataFolder = value).Required();
+
+            cmd_parser.Setup<long>("blocksDbCache").Callback(value => blocksDbCacheSize = (ulong)value);
+
+            cmd_parser.Setup<long>("activityDbCache").Callback(value => activityDbCacheSize = (ulong)value);
+
+            cmd_parser.Setup<string>("p2pTxMode").Callback(value => CoreConfig.p2pTransactionMode = parseP2PTxModeValue(value)).Required();
+
+            cmd_parser.Setup<string>("blockVerificationMode").Callback(value => blockVerificationMode = parseBlockVerificationMode(value)).Required();
+
+            cmd_parser.Setup<bool>("disableBlockPruning").Callback(value => disableBlockPruning = value).Required();
+
+            // QuIXI Specific
+
+            cmd_parser.Setup<string>("name").Callback(value => friendlyName = value).Required();
 
             // Debug
 
@@ -416,13 +511,25 @@ namespace QuIXI.Meta
 
             if (headersFolderPath == "")
             {
-                if (IxianHandler.networkType == NetworkType.main)
+                if (networkType == NetworkType.main)
                 {
                     headersFolderPath = Path.Combine(dataFolder, "headers");
                 }
                 else
                 {
                     headersFolderPath = Path.Combine(dataFolder, "testnet-headers");
+                }
+            }
+
+            if (activityFolderPath == "")
+            {
+                if (networkType == NetworkType.main)
+                {
+                    activityFolderPath = Path.Combine(dataFolder, "activity");
+                }
+                else
+                {
+                    activityFolderPath = Path.Combine(dataFolder, "testnet-activity");
                 }
             }
 

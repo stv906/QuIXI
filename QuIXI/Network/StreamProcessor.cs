@@ -5,6 +5,7 @@ using IXICore.Meta;
 using IXICore.Network;
 using IXICore.Streaming;
 using System.Text;
+using IXICore.Streaming.Models;
 
 namespace QuIXI.Network
 {
@@ -15,9 +16,9 @@ namespace QuIXI.Network
         }
 
         // Called when receiving S2 data from clients
-        public override ReceiveDataResponse receiveData(byte[] bytes, RemoteEndpoint endpoint, bool fireLocalNotification = true, bool alert = true)
+        public override ReceiveDataResponse? receiveData(byte[] bytes, RemoteEndpoint endpoint, bool fireLocalNotification = true, bool alert = true)
         {
-            ReceiveDataResponse rdr = base.receiveData(bytes, endpoint, fireLocalNotification);
+            ReceiveDataResponse? rdr = base.receiveData(bytes, endpoint, fireLocalNotification);
             if (rdr == null)
             {
                 return rdr;
@@ -127,7 +128,7 @@ namespace QuIXI.Network
                         {
                             Node.messageQueue.PublishAsync(MQTopics.RequestAdd2, message);
 
-                            ProtocolMessage.resubscribeEvents();
+                            CoreProtocolMessage.resubscribeEvents();
                             fetchFriendsPresence(friend);
                         }
                         break;
@@ -137,7 +138,7 @@ namespace QuIXI.Network
                         {
                             Node.messageQueue.PublishAsync(MQTopics.AcceptAdd2, message);
 
-                            ProtocolMessage.resubscribeEvents();
+                            CoreProtocolMessage.resubscribeEvents();
                             fetchFriendsPresence(friend);
                         }
                         break;
@@ -145,7 +146,7 @@ namespace QuIXI.Network
                     case SpixiMessageCode.keys:
                     case SpixiMessageCode.keys2:
                         {
-                            ProtocolMessage.resubscribeEvents();
+                            CoreProtocolMessage.resubscribeEvents();
                             fetchFriendsPresence(friend);
                         }
                         break;
@@ -228,6 +229,26 @@ namespace QuIXI.Network
 
                     case SpixiMessageCode.appProtocols:
                         Node.messageQueue.PublishAsync(MQTopics.AppProtocols, message);
+                        break;
+
+                    case SpixiMessageCode.transactionRequest:
+                        Node.messageQueue.PublishAsync(MQTopics.TransactionRequest, message);
+                        break;
+
+                    case SpixiMessageCode.transactionSend:
+                        Node.messageQueue.PublishAsync(MQTopics.Transaction, new TransactionSend(spixi_message.data).Transaction);
+                        break;
+
+                    case SpixiMessageCode.transactionSendRequest:
+                        Node.messageQueue.PublishAsync(MQTopics.TransactionSendRequest, message);
+                        break;
+
+                    case SpixiMessageCode.transactionSendResponse:
+                        Node.messageQueue.PublishAsync(MQTopics.TransactionSendResponse, message);
+                        break;
+
+                    default:
+                        Logging.warn("Unknown SpixiMessageCode {0}", spixi_message.type);
                         break;
                 }
             }

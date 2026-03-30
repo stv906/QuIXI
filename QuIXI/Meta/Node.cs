@@ -10,7 +10,7 @@ using IXICore.RegNames;
 using IXICore.Storage;
 using IXICore.Streaming;
 using IXICore.Utils;
-using static IXICore.Transaction;
+using IXICore.Activity;
 
 namespace QuIXI.Meta
 {
@@ -22,18 +22,20 @@ namespace QuIXI.Meta
 
         public static NetworkClientManagerStatic networkClientManagerStatic = null;
 
-        public static IMessageQueue messageQueue = null;
+        public static IActivityStorage activityStorage = null;
+
+        public static IStorage storage = null;
+
+        public static IMessageQueue? messageQueue = null;
 
         // Private data
-        private StatsConsoleScreen? statsConsoleScreen = null;
+        private StatsConsoleScreen statsConsoleScreen;
 
         private GenericAPIServer? apiServer = null;
 
-        private Thread? mainLoopThread;
+        private Thread? mainLoopThread = null;
 
         private bool running = false;
-
-        //public static IActivityStorage activityStorage;
 
         public Node()
         {
@@ -55,8 +57,15 @@ namespace QuIXI.Meta
             }
 
             Logging.info($"Initing Message Queue with Driver: {Config.mqDriver}");
-
             initMessageQueue();
+
+            // Initialize storage
+            if (storage is null)
+            {
+                storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles);
+            }
+
+            activityStorage = new ActivityStorage(Config.activityFolderPath, Config.activityDbCacheSize, 0, RocksDBOptimizations.Mobiles);
 
             PeerStorage.init(Config.dataFolder);
 
@@ -68,14 +77,14 @@ namespace QuIXI.Meta
             streamProcessor = new StreamProcessor(new ICPendingMessageProcessor(Config.dataFolder, false), Config.streamCapabilities);
 
             // Init TIV
-            tiv = new TransactionInclusion(new ICTransactionInclusionCallbacks(), false);
+            tiv = new TransactionInclusion(storage, new ICTransactionInclusionCallbacks(), Config.blockVerificationMode);
 
             Logging.info("Initing local storage");
 
             // Prepare the local storage
             IxianHandler.localStorage = new LocalStorage(Config.dataFolder, new ICLocalStorageCallbacks());
 
-            FriendList.init(Config.dataFolder);
+            FriendList.init(Config.dataFolder, true);
 
             UpdateVerify.init(Config.checkVersionUrl, Config.checkVersionSeconds);
 
@@ -84,6 +93,11 @@ namespace QuIXI.Meta
             InventoryCache.init(new InventoryCacheClient(tiv));
 
             RelaySectors.init(CoreConfig.relaySectorLevels, null);
+
+            apiServer = new APIServer();
+
+            // Setup the stats console
+            statsConsoleScreen = new StatsConsoleScreen();
 
             Logging.info("Node init done");
         }
@@ -120,6 +134,8 @@ namespace QuIXI.Meta
             Logging.info("Starting node");
 
             running = true;
+            IxianHandler.forceShutdown = false;
+            IxianHandler.status = NodeStatus.warmUp;
 
             // Start local storage
             IxianHandler.localStorage.start();
@@ -132,10 +148,33 @@ namespace QuIXI.Meta
 
             UpdateVerify.start();
 
+            if (!storage.prepareStorage(false))
+            {
+                Logging.error("Error while preparing block storage! Aborting.");
+                IxianHandler.forceShutdown = true;
+                return;
+            }
+
+            activityStorage.prepareStorage(false);
+
+            var pending_txs = activityStorage.getActivitiesByStatus(ActivityStatus.Pending, true);
+            pending_txs.AddRange(activityStorage.getActivitiesByStatus(ActivityStatus.Reverted, true));
+            // Load pending transactions
+            foreach (var pending_tx in pending_txs)
+            {
+                if (pending_tx.type == ActivityType.TransactionReceived)
+                {
+                    PendingTransactions.addIncomingTransaction(pending_tx.transaction);
+                }
+                else if (pending_tx.type == ActivityType.TransactionSent
+                        || pending_tx.type == ActivityType.IxiName)
+                {
+                    PendingTransactions.addOutgoingTransaction(pending_tx.transaction, pending_tx.transaction.toList.TakeLast(2).Select(x => x.Key).ToList());
+                }
+            }
+
             ulong block_height = 0;
-            byte[] block_checksum = null;
-
-
+            byte[]? block_checksum = null;
             if (IxianHandler.networkType == NetworkType.main)
             {
                 block_height = CoreConfig.bakedBlockHeight;
@@ -143,8 +182,8 @@ namespace QuIXI.Meta
             }
 
             // Start TIV
-            tiv.start(Config.headersFolderPath, block_height, block_checksum, true);
-
+            tiv.start(block_height, block_checksum, Config.disableBlockPruning);
+            
             // Generate presence list
             PresenceList.init(IxianHandler.publicIP, 0, 'C', CoreConfig.clientKeepAliveInterval);
 
@@ -156,9 +195,6 @@ namespace QuIXI.Meta
             // Start the keepalive thread
             PresenceList.startKeepAlive();
 
-            //activityStorage = new ActivityStorage(Path.Combine(Environment.CurrentDirectory, "activity"), 32 << 20, 0);
-            //activityStorage.prepareStorage(true);
-
             mainLoopThread = new Thread(mainLoop);
             mainLoopThread.Name = "Main_Loop_Thread";
             mainLoopThread.Start();
@@ -168,13 +204,9 @@ namespace QuIXI.Meta
                 Config.apiBinds.Add("http://localhost:" + Config.apiPort + "/");
             }
 
-            apiServer = new APIServer();
-            apiServer.start(Config.apiBinds, Config.apiUsers, Config.apiAllowedIps);
+            apiServer.start(Config.apiBinds, Config.apiUsers, Config.apiAllowedIps, activityStorage);
 
             Logging.info("Node started");
-
-            // Setup the stats console
-            statsConsoleScreen = new StatsConsoleScreen();
 
             // Prepare stats screen
             ConsoleHelpers.verboseConsoleOutput = verboseConsoleOutput;
@@ -194,27 +226,12 @@ namespace QuIXI.Meta
             NetworkClientManager.start(2);
 
             // Start the s2 client manager
-            StreamClientManager.start(Config.maxConnectedStreamingNodes, !Config.exposePublicIP);
+            StreamClientManager.start(Config.maxConnectedStreamingNodes, !Config.exposePublicIP, true);
         }
 
         // Handle timer routines
         public void mainLoop()
         {
-            byte[] primaryAddress = IxianHandler.getWalletStorage().getPrimaryAddress().addressNoChecksum;
-            if (primaryAddress == null)
-                return;
-
-            byte[] getBalanceBytes;
-            using (MemoryStream mw = new MemoryStream())
-            {
-                using (BinaryWriter writer = new BinaryWriter(mw))
-                {
-                    writer.WriteIxiVarInt(primaryAddress.Length);
-                    writer.Write(primaryAddress);
-                }
-                getBalanceBytes = mw.ToArray();
-            }
-
             try
             {
                 while (running)
@@ -229,14 +246,22 @@ namespace QuIXI.Meta
                         // TODO: optimize this by using a different thread perhaps
                         PresenceList.performCleanup();
 
-                        Balance balance = IxianHandler.balances.First();
-                        // Request initial wallet balance
-                        if (balance.blockHeight == 0 || balance.lastUpdate + 300 < Clock.getTimestamp())
+                        bool firstBalance = true;
+                        foreach (var balance in IxianHandler.balances)
                         {
-                            CoreProtocolMessage.broadcastProtocolMessage(['M', 'H', 'R'], ProtocolMessageCode.getBalance2, getBalanceBytes, null);
-                            CoreProtocolMessage.fetchSectorNodes(IxianHandler.primaryWalletAddress, CoreConfig.maxRelaySectorNodesToRequest);
-                            //ProtocolMessage.fetchAllFriendsSectorNodes(10);
-                            //StreamProcessor.fetchAllFriendsPresences(10);
+                            // Request initial wallet balance
+                            if (balance.blockHeight == 0 || balance.lastUpdate + 300 < Clock.getTimestamp())
+                            {
+                                CoreProtocolMessage.broadcastProtocolMessage(['M', 'H', 'R'], ProtocolMessageCode.getBalance2, balance.address.addressNoChecksum.GetIxiBytes(), null);
+
+                                if (firstBalance)
+                                {
+                                    CoreProtocolMessage.fetchSectorNodes(IxianHandler.primaryWalletAddress, CoreConfig.maxRelaySectorNodesToRequest);
+                                    //ProtocolMessage.fetchAllFriendsSectorNodes(10);
+                                    //StreamProcessor.fetchAllFriendsPresences(10);
+                                }
+                            }
+                            firstBalance = false;
                         }
                     }
                     catch (Exception e)
@@ -259,7 +284,7 @@ namespace QuIXI.Meta
                 // Go through each friend and check for the pubkey in the PL
                 foreach (Friend friend in FriendList.friends)
                 {
-                    Presence presence = null;
+                    Presence? presence = null;
 
                     try
                     {
@@ -297,13 +322,13 @@ namespace QuIXI.Meta
         {
             if (!running)
             {
-                Logging.stop();
-                IxianHandler.status = NodeStatus.stopped;
                 return;
             }
 
             Logging.info("Stopping node...");
             running = false;
+
+            IxianHandler.status = NodeStatus.stopping;
 
             PeerStorage.savePeersFile(true);
 
@@ -331,7 +356,7 @@ namespace QuIXI.Meta
                 apiServer = null;
             }
 
-            //activityStorage.stopStorage();
+            activityStorage.stopStorage();
 
             // Stop the network queue
             NetworkQueue.stop();
@@ -347,6 +372,9 @@ namespace QuIXI.Meta
                 mainLoopThread.Join();
                 mainLoopThread = null;
             }
+
+            // Stop the block storage
+            storage.stopStorage();
 
             IxianHandler.status = NodeStatus.stopped;
 
@@ -369,11 +397,12 @@ namespace QuIXI.Meta
 
         public override ulong getLastBlockHeight()
         {
-            if (tiv.getLastBlockHeader() == null)
+            Block? block = tiv.getLastBlockHeader();
+            if (block == null)
             {
                 return 0;
             }
-            return tiv.getLastBlockHeader().blockNum;
+            return block.blockNum;
         }
 
         public override ulong getHighestKnownNetworkBlockHeight()
@@ -390,30 +419,51 @@ namespace QuIXI.Meta
 
         public override int getLastBlockVersion()
         {
-            if (tiv.getLastBlockHeader() == null
-                || tiv.getLastBlockHeader().version < Block.maxVersion)
+            Block? block = tiv.getLastBlockHeader();
+            if (block == null
+                || block.version < Block.maxVersion)
             {
                 // TODO Omega force to v10 after upgrade
                 return Block.maxVersion - 1;
             }
-            return tiv.getLastBlockHeader().version;
+            return block.version;
         }
 
-        public override bool addTransaction(Transaction tx, List<Address> relayNodeAddresses, bool force_broadcast)
+        public override bool addIncomingTransaction(Transaction tx)
         {
-            foreach (var address in relayNodeAddresses)
+            if (tx.timeStamp == 0)
             {
-                NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, tx.getBytes(true, true), null);
+                tx.timeStamp = Clock.getTimestamp();
             }
-            if (PendingTransactions.addPendingLocalTransaction(tx, relayNodeAddresses))
+            if (IxianHandler.addTransactionToActivityStorage(activityStorage, tx))
             {
-                //addTransactionToActivityStorage(tx);
-                return true;
+                return PendingTransactions.addIncomingTransaction(tx);
             }
             return false;
         }
 
-        public override Block getLastBlock()
+        public override bool addTransaction(Transaction tx, List<Address> relayNodeAddresses, List<ExtendedAddress>? extendedAddresses, byte[]? requestId, bool force_broadcast)
+        {
+            if (IxianHandler.addTransactionToActivityStorage(activityStorage, tx))
+            {
+                if (PendingTransactions.addOutgoingTransaction(tx, relayNodeAddresses))
+                {
+                    Node.messageQueue.PublishAsync(MQTopics.Transaction, tx);
+                    foreach (var address in relayNodeAddresses)
+                    {
+                        NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, tx.getBytes(true, true), null);
+                    }
+                    if (extendedAddresses != null)
+                    {
+                        CoreStreamProcessor.transactionSend(tx, extendedAddresses, requestId);
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public override Block? getLastBlock()
         {
             return tiv.getLastBlockHeader();
         }
@@ -443,7 +493,7 @@ namespace QuIXI.Meta
         {
             Balance balance = IxianHandler.balances.First();
             IxiNumber currentBalance = balance.balance;
-            currentBalance -= TransactionCache.getPendingSentTransactionsAmount();
+            currentBalance -= PendingTransactions.getPendingSendingTransactionsAmount();
 
             return currentBalance;
         }
@@ -453,101 +503,30 @@ namespace QuIXI.Meta
             ProtocolMessage.parseProtocolMessage(code, data, endpoint);
         }
 
-        public static void processPendingTransactions()
+        public override Block? getBlockHeader(ulong blockNum)
         {
-            ulong last_block_height = IxianHandler.getLastBlockHeight();
-            lock (PendingTransactions.pendingTransactions)
-            {
-                long cur_time = Clock.getTimestamp();                
-                List<PendingTransaction> tmp_pending_transactions = new(PendingTransactions.pendingTransactions);
-                foreach (var entry in tmp_pending_transactions)
-                {
-                    long tx_time = entry.addedTimestamp;
-
-                    if (entry.transaction.blockHeight > last_block_height)
-                    {
-                        // not ready yet, syncing to the network
-                        continue;
-                    }
-
-                    Transaction t = TransactionCache.getTransaction(entry.transaction.id);
-                    if (t == null)
-                    {
-                        t = entry.transaction;
-                    }
-                    else
-                    {
-                        if (t.applied != 0)
-                        {
-                            PendingTransactions.pendingTransactions.RemoveAll(x => x.transaction.id.SequenceEqual(t.id));
-                            continue;
-                        }
-                    }
-
-                    // if transaction expired, remove it from pending transactions
-                    if (last_block_height > ConsensusConfig.getRedactedWindowSize()
-                        && t.blockHeight < last_block_height - ConsensusConfig.getRedactedWindowSize())
-                    {
-                        Logging.error("Error sending the transaction {0}, expired", t.getTxIdString());
-                        //activityStorage.updateStatus(t.id, ActivityStatus.Error, 0);
-                        PendingTransactions.pendingTransactions.RemoveAll(x => x.transaction.id.SequenceEqual(t.id));
-                        continue;
-                    }
-
-                    if (entry.rejectedNodeList.Count() > 3
-                        && entry.rejectedNodeList.Count() > entry.confirmedNodeList.Count())
-                    {
-                        Logging.error("Error sending the transaction {0}, rejected", t.getTxIdString());
-                        //activityStorage.updateStatus(t.id, ActivityStatus.Error, 0);
-                        PendingTransactions.pendingTransactions.RemoveAll(x => x.transaction.id.SequenceEqual(t.id));
-                        continue;
-                    }
-
-                    if (cur_time - tx_time > 60) // if the transaction is pending for over 60 seconds, resend
-                    {
-                        Logging.warn("Transaction {0} pending for a while, resending", t.getTxIdString());
-                        foreach (var address in entry.relayNodeAddresses)
-                        {
-                            NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, t.getBytes(true, true), null);
-                        }
-                        CoreProtocolMessage.broadcastGetTransaction(t.id, 0);
-                        entry.addedTimestamp = cur_time;
-                        entry.confirmedNodeList.Clear();
-                        entry.rejectedNodeList.Clear();
-                    }
-                }
-            }
-        }
-
-        public override Block getBlockHeader(ulong blockNum)
-        {
-            return BlockHeaderStorage.getBlockHeader(blockNum);
+            return storage.getBlock(blockNum);
         }
 
         public override IxiNumber getMinSignerPowDifficulty(ulong blockNum, int curBlockVersion, long curBlockTimestamp)
         {
-            // TODO TODO implement this properly
-            return ConsensusConfig.minBlockSignerPowDifficulty;
+            return tiv.getMinSignerPowDifficulty(blockNum, curBlockVersion, curBlockTimestamp);
         }
 
         public override RegisteredNameRecord getRegName(byte[] name, bool useAbsoluteId = true)
         {
             throw new NotImplementedException();
         }
-        public override byte[] getBlockHash(ulong blockNum)
-        {
-            Block b = getBlockHeader(blockNum);
-            if (b == null)
-            {
-                return null;
-            }
 
-            return b.blockChecksum;
+        public override byte[]? getBlockHash(ulong blockNum)
+        {
+            var tsd = storage.getBlockTotalSignerDifficulty(blockNum);
+            return tsd.blockHash;
         }
 
-        public static FriendMessage addMessageWithType(byte[] id, FriendMessageType type, Address wallet_address, int channel, string message, bool local_sender = false, Address sender_address = null, long timestamp = 0, bool fire_local_notification = true, int payable_data_len = 0)
+        public static FriendMessage? addMessageWithType(byte[] id, FriendMessageType type, Address wallet_address, int channel, string message, bool local_sender = false, Address? sender_address = null, long timestamp = 0, bool fire_local_notification = true, int payable_data_len = 0)
         {
-            FriendMessage friend_message = FriendList.addMessageWithType(id, type, wallet_address, channel, message, local_sender, sender_address, timestamp, fire_local_notification, payable_data_len);
+            FriendMessage? friend_message = FriendList.addMessageWithType(id, type, wallet_address, channel, message, local_sender, sender_address, timestamp, fire_local_notification, payable_data_len);
             if (friend_message != null)
             {
                 bool oldMessage = false;
@@ -577,101 +556,24 @@ namespace QuIXI.Meta
             return friend_message;
         }
 
-        static public Transaction sendTransaction(Address address, IxiNumber amount)
-        {
-            // TODO add support for sending funds from multiple addreses automatically based on remaining balance
-            Balance address_balance = IxianHandler.balances.First();
-            var from = address_balance.address;
-            return sendTransactionFrom(from, address, amount);
-        }
-
-        static public (Transaction transaction, List<Address> relayNodeAddresses) prepareTransactionFrom(Address fromAddress, Address toAddress, IxiNumber amount)
-        {
-            IxiNumber fee = ConsensusConfig.forceTransactionPrice;
-            Dictionary<Address, ToEntry> to_list = new(new AddressComparer());
-            Balance address_balance = IxianHandler.balances.FirstOrDefault(addr => addr.address.addressNoChecksum.SequenceEqual(fromAddress.addressNoChecksum));
-            Address pubKey = new(IxianHandler.getWalletStorage().getPrimaryPublicKey());
-
-            if (!IxianHandler.getWalletStorage().isMyAddress(fromAddress))
-            {
-                Logging.info("From address is not my address.");
-                return (null, null);
-            }
-
-            Dictionary<byte[], IxiNumber> from_list = new(new ByteArrayComparer())
-            {
-                { IxianHandler.getWalletStorage().getAddress(fromAddress).nonce, amount }
-            };
-
-            to_list.AddOrReplace(toAddress, new ToEntry(Transaction.getExpectedVersion(IxianHandler.getLastBlockVersion()), amount));
-
-            List<Address> relayNodeAddresses = NetworkClientManager.getRandomConnectedClientAddresses(2);
-            IxiNumber relayFee = 0;
-            foreach (Address relayNodeAddress in relayNodeAddresses)
-            {
-                var tmpFee = fee > ConsensusConfig.transactionDustLimit ? fee : ConsensusConfig.transactionDustLimit;
-                to_list.AddOrReplace(relayNodeAddress, new ToEntry(Transaction.getExpectedVersion(IxianHandler.getLastBlockVersion()), tmpFee));
-                relayFee += tmpFee;
-            }
-
-
-            // Prepare transaction to calculate fee
-            Transaction transaction = new((int)Transaction.Type.Normal, fee, to_list, from_list, pubKey, IxianHandler.getHighestKnownNetworkBlockHeight());
-
-            relayFee = 0;
-            foreach (Address relayNodeAddress in relayNodeAddresses)
-            {
-                var tmpFee = transaction.fee > ConsensusConfig.transactionDustLimit ? transaction.fee : ConsensusConfig.transactionDustLimit;
-                to_list[relayNodeAddress].amount = tmpFee;
-                relayFee += tmpFee;
-            }
-
-            byte[] first_address = from_list.Keys.First();
-            from_list[first_address] = from_list[first_address] + relayFee + transaction.fee;
-            IxiNumber wal_bal = IxianHandler.getWalletBalance(new Address(transaction.pubKey.addressNoChecksum, first_address));
-            if (from_list[first_address] > wal_bal)
-            {
-                IxiNumber maxAmount = wal_bal - transaction.fee;
-
-                if (maxAmount < 0)
-                    maxAmount = 0;
-
-                Logging.info("Insufficient funds to cover amount and transaction fee.\nMaximum amount you can send is {0} IXI.\n", maxAmount);
-                return (null, null);
-            }
-            // Prepare transaction with updated "from" amount to cover fee
-            transaction = new((int)Transaction.Type.Normal, fee, to_list, from_list, pubKey, IxianHandler.getHighestKnownNetworkBlockHeight());
-            return (transaction, relayNodeAddresses);
-        }
-
-        static public Transaction sendTransactionFrom(Address fromAddress, Address toAddress, IxiNumber amount)
-        {
-            var prepTx = prepareTransactionFrom(fromAddress, toAddress, amount);
-            var transaction = prepTx.transaction;
-            var relayNodeAddresses = prepTx.relayNodeAddresses;
-            // Send the transaction
-            if (IxianHandler.addTransaction(transaction, relayNodeAddresses, true))
-            {
-                Logging.info("Sending transaction, txid: {0}", transaction.getTxIdString());
-                return transaction;
-            }
-            else
-            {
-                Logging.warn("Could not send transaction, txid: {0}", transaction.getTxIdString());
-            }
-            return null;
-        }
-
         // Cleans the storage cache and logs
         public static bool cleanCacheAndLogs()
         {
-            /*if (activityStorage is null)
+            if (activityStorage is null)
             {
-                activityStorage = new ActivityStorage(Config.activityFolderPath, 32 << 20, 0);
+                activityStorage = new ActivityStorage(Config.activityFolderPath, Config.activityDbCacheSize, 0, RocksDBOptimizations.Mobiles);
             }
             activityStorage.stopStorage();
             activityStorage.deleteData();
-            activityStorage.prepareStorage(false);*/
+            activityStorage.prepareStorage(false);
+
+            if (storage is null)
+            {
+                storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles);
+            }
+            storage.stopStorage();
+            storage.deleteData();
+            storage.prepareStorage(false);
 
             PeerStorage.deletePeersFile();
 

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using IXICore;
+using Newtonsoft.Json;
 using System.Text;
 
 namespace QuIXI.MQ.Serializers
@@ -7,7 +8,9 @@ namespace QuIXI.MQ.Serializers
     {
         public byte[] Serialize<T>(T obj)
         {
-            return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(obj, new JsonSerializerSettings() { ReferenceLoopHandling = ReferenceLoopHandling.Ignore }));
+            return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(obj, new JsonSerializerSettings() { ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+                Converters = new List<JsonConverter> { new ByteArrayDictionaryConverter<IxiNumber>() }
+            }));
         }
 
         public T Deserialize<T>(byte[] data)

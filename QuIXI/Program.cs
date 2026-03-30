@@ -2,7 +2,6 @@
 using IXICore;
 using IXICore.Meta;
 using IXICore.Utils;
-using System.Reflection;
 
 namespace QuIXI
 {
@@ -30,9 +29,15 @@ namespace QuIXI
             // Read configuration from command line
             Config.init(args);
 
+            if (!Directory.Exists(Config.dataFolder))
+            {
+                Directory.CreateDirectory(Config.dataFolder);
+            }
+
             // Start logging
             if (!Logging.start(Config.logFolderPath, Config.logVerbosity))
             {
+                IxianHandler.forceShutdown = true;
                 Logging.info("Press ENTER to exit.");
                 Console.ReadLine();
                 return;
