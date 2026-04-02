@@ -207,7 +207,7 @@ namespace QuIXI.Network
                                     ulong block_height = reader.ReadIxiVarUInt();
                                     byte[] block_checksum = reader.ReadBytes((int)reader.ReadIxiVarUInt());
 
-                                    foreach (Balance balance in IxianHandler.balances)
+                                    foreach (Balance balance in IxianHandler.balances.Values)
                                     {
                                         if (address.addressNoChecksum.SequenceEqual(balance.address.addressNoChecksum))
                                         {
@@ -375,6 +375,11 @@ namespace QuIXI.Network
                 using (BinaryReader reader = new BinaryReader(m))
                 {
                     ulong from = reader.ReadIxiVarUInt();
+                    if (from > IxianHandler.getLastBlockHeight() + 1)
+                    {
+                        Logging.warn("Received block headers starting from {0}, but our last block height is {1}. Ignoring.", from, IxianHandler.getLastBlockHeight());
+                        return;
+                    }
                     ulong totalCount = reader.ReadIxiVarUInt();
 
                     int filterLen = (int)reader.ReadIxiVarUInt();
@@ -390,6 +395,14 @@ namespace QuIXI.Network
 
         private static void handleTransactionData(byte[] data, RemoteEndpoint endpoint)
         {
+            if (endpoint.presenceAddress.type != 'M'
+                && endpoint.presenceAddress.type != 'H'
+                && endpoint.presenceAddress.type != 'R')
+            {
+                Logging.warn("Received transaction data from non-master node {0}. Ignoring.", endpoint.getFullAddress());
+                return;
+            }
+
             Transaction tx = new Transaction(data, true, true);
 
             // Check if my transaction

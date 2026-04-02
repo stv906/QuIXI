@@ -2,6 +2,7 @@
 using IXICore;
 using IXICore.Meta;
 using IXICore.Activity;
+using IXICore.Utils;
 
 namespace QuIXI.Meta
 {
@@ -12,11 +13,21 @@ namespace QuIXI.Meta
             var bh = IxianHandler.getBlockHeader(tx.applied);
             Node.activityStorage.updateStatus(tx.id, ActivityStatus.Final, tx.applied, bh.timestamp);
 
+            requestBalanceUpdate(tx);
+
+            var obj = new Dictionary<string, string>();
+            obj.Add(tx.getTxIdString(), "verified");
+
+            Node.messageQueue.PublishAsync(MQTopics.TransactionStatusUpdate, obj);
+        }
+
+        private void requestBalanceUpdate(Transaction tx)
+        {
             if (IxianHandler.isMyAddress(tx.pubKey))
             {
                 foreach (var fromEntry in tx.fromList)
                 {
-                    IxianHandler.balances.FirstOrDefault(x => x.address != null && x.address.SequenceEqual(new Address(tx.pubKey.getInputBytes(), fromEntry.Key)))?.lastUpdate = 0;
+                    IxianHandler.balances.TryGet(new Address(tx.pubKey.getInputBytes(), fromEntry.Key))?.lastUpdate = 0;
                 }
             }
             else
@@ -25,21 +36,16 @@ namespace QuIXI.Meta
                 {
                     if (IxianHandler.isMyAddress(toEntry.Key))
                     {
-                        IxianHandler.balances.FirstOrDefault(x => x.address != null && x.address.SequenceEqual(toEntry.Key))?.lastUpdate = 0;
+                        IxianHandler.balances.TryGet(toEntry.Key)?.lastUpdate = 0;
                     }
                 }
             }
-
-            var obj = new Dictionary<string, string>();
-            obj.Add(tx.getTxIdString(), "verified");
-
-            Node.messageQueue.PublishAsync(MQTopics.TransactionStatusUpdate, obj);
         }
 
         public void transactionRejected(Transaction tx)
         {
             tx.applied = 0;
-            Node.activityStorage.updateStatus(tx.id, ActivityStatus.Error, 0);
+            Node.activityStorage.updateStatus(tx.id, ActivityStatus.Rejected, 0);
 
             var obj = new Dictionary<string, string>();
             obj.Add(tx.getTxIdString(), "rejected");
@@ -50,7 +56,7 @@ namespace QuIXI.Meta
         public void transactionExpired(Transaction tx)
         {
             tx.applied = 0;
-            Node.activityStorage.updateStatus(tx.id, ActivityStatus.Error, 0);
+            Node.activityStorage.updateStatus(tx.id, ActivityStatus.Expired, 0);
 
             var obj = new Dictionary<string, string>();
             obj.Add(tx.getTxIdString(), "expired");
@@ -60,7 +66,7 @@ namespace QuIXI.Meta
 
         public void receivedBlockHeader(Block blockHeader, bool verified)
         {
-            foreach (Balance balance in IxianHandler.balances)
+            foreach (Balance balance in IxianHandler.balances.Values)
             {
                 if (balance.blockChecksum != null && balance.blockChecksum.SequenceEqual(blockHeader.blockChecksum))
                 {
@@ -68,16 +74,16 @@ namespace QuIXI.Meta
                 }
             }
 
-            if (blockHeader.blockNum + 10 >= IxianHandler.getHighestKnownNetworkBlockHeight()
+            /*if (blockHeader.blockNum + 10 >= IxianHandler.getHighestKnownNetworkBlockHeight()
                 && (IxianHandler.status == NodeStatus.warmUp || IxianHandler.status == NodeStatus.stalled))
-            {
+            {*/
                 IxianHandler.status = NodeStatus.ready;
-            }
+            //}
 
             Node.messageQueue.PublishAsync(MQTopics.BlockHeader, blockHeader);
 
             // if block pruning is not enabled, we can prune old block signatures and TxIDs to save space.
-            if (!Node.tiv.pruneBlocks
+            if (Config.disableBlockPruning
                 && blockHeader.blockNum % CoreConfig.maxBlockHeadersPerDatabase == 0)
             {
                 ulong fullBlocksToKeep = 4000;
@@ -104,9 +110,9 @@ namespace QuIXI.Meta
         {
             var revertedTransactions = Node.activityStorage.revertTransactionsByBlockHeight(blockHeader.blockNum);
             Node.messageQueue.PublishAsync(MQTopics.BlockReorg, blockHeader);
-            foreach(var revertedTx in revertedTransactions)
+            foreach(var revertedTxId in revertedTransactions)
             {
-                var activity = Node.activityStorage.getActivityById(revertedTx, null, true);
+                var activity = Node.activityStorage.getActivityById(revertedTxId, null, true);
                 PendingTransactions.addOutgoingTransaction(activity.transaction, activity.transaction.toList.TakeLast(2).Select(x => x.Key).ToList());
 
                 var obj = new Dictionary<string, string>();

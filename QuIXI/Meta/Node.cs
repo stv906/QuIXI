@@ -182,7 +182,7 @@ namespace QuIXI.Meta
             }
 
             // Start TIV
-            tiv.start(block_height, block_checksum, Config.disableBlockPruning);
+            tiv.start(block_height, block_checksum, !Config.disableBlockPruning);
             
             // Generate presence list
             PresenceList.init(IxianHandler.publicIP, 0, 'C', CoreConfig.clientKeepAliveInterval);
@@ -247,7 +247,7 @@ namespace QuIXI.Meta
                         PresenceList.performCleanup();
 
                         bool firstBalance = true;
-                        foreach (var balance in IxianHandler.balances)
+                        foreach (var balance in IxianHandler.balances.Values)
                         {
                             // Request initial wallet balance
                             if (balance.blockHeight == 0 || balance.lastUpdate + 300 < Clock.getTimestamp())
@@ -444,6 +444,10 @@ namespace QuIXI.Meta
 
         public override bool addTransaction(Transaction tx, List<Address> relayNodeAddresses, List<ExtendedAddress>? extendedAddresses, byte[]? requestId, bool force_broadcast)
         {
+            if (tx.timeStamp == 0)
+            {
+                tx.timeStamp = Clock.getTimestamp();
+            }
             if (IxianHandler.addTransactionToActivityStorage(activityStorage, tx))
             {
                 if (PendingTransactions.addOutgoingTransaction(tx, relayNodeAddresses))
@@ -466,36 +470,6 @@ namespace QuIXI.Meta
         public override Block? getLastBlock()
         {
             return tiv.getLastBlockHeader();
-        }
-
-        public override Wallet getWallet(Address id)
-        {
-            foreach (Balance balance in IxianHandler.balances)
-            {
-                if (id.addressNoChecksum.SequenceEqual(balance.address.addressNoChecksum))
-                    return new Wallet(id, balance.balance);
-            }
-            return new Wallet(id, 0);
-        }
-
-        public override IxiNumber getWalletBalance(Address id)
-        {
-            foreach (Balance balance in IxianHandler.balances)
-            {
-                if (id.addressNoChecksum.SequenceEqual(balance.address.addressNoChecksum))
-                    return balance.balance;
-            }
-            return 0;
-        }
-
-        // Returns the current wallet's usable balance
-        public static IxiNumber getAvailableBalance()
-        {
-            Balance balance = IxianHandler.balances.First();
-            IxiNumber currentBalance = balance.balance;
-            currentBalance -= PendingTransactions.getPendingSendingTransactionsAmount();
-
-            return currentBalance;
         }
 
         public override void parseProtocolMessage(ProtocolMessageCode code, byte[] data, RemoteEndpoint endpoint)
@@ -701,7 +675,7 @@ namespace QuIXI.Meta
             List<Address> address_list = IxianHandler.getWalletStorage().getMyAddresses();
             foreach (Address addr in address_list)
             {
-                IxianHandler.balances.Add(new Balance(addr, 0));
+                IxianHandler.balances.Add(addr, new Balance(addr, 0));
             }
 
             return true;
