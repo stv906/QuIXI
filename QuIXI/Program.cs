@@ -37,7 +37,6 @@ namespace QuIXI
             // Start logging
             if (!Logging.start(Config.logFolderPath, Config.logVerbosity))
             {
-                IxianHandler.forceShutdown = true;
                 Logging.info("Press ENTER to exit.");
                 Console.ReadLine();
                 return;
@@ -47,7 +46,7 @@ namespace QuIXI
                 ConsoleHelpers.verboseConsoleOutput = true;
                 Logging.consoleOutput = ConsoleHelpers.verboseConsoleOutput;
                 e.Cancel = true;
-                IxianHandler.forceShutdown = true;
+                IxianHandler.shutdown();
             };
 
             if (onStart(args))
@@ -81,7 +80,11 @@ namespace QuIXI
             }
 
             // Start the node
-            node.start(Config.verboseOutput);
+            if (!node.start(Config.verboseOutput))
+            {
+                Thread.Sleep(1000);
+                return false;
+            }
 
             if (ConsoleHelpers.verboseConsoleOutput)
                 Console.WriteLine("-----------\nPress Ctrl-C or use the /shutdown API to stop the QuIXI process at any time.\n");
@@ -110,7 +113,7 @@ namespace QuIXI
                         {
                             ConsoleHelpers.verboseConsoleOutput = true;
                             Logging.consoleOutput = ConsoleHelpers.verboseConsoleOutput;
-                            IxianHandler.forceShutdown = true;
+                            IxianHandler.shutdown();
                         }
 
                     }
@@ -127,7 +130,7 @@ namespace QuIXI
         static void onStop()
         {
             // Stop the node
-            node?.stop();
+            IxianHandler.shutdown();
 
             // Stop logging
             Logging.stop();

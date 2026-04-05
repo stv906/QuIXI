@@ -44,26 +44,22 @@ namespace QuIXI.Meta
             init();
         }
 
-        private void init()
+        private bool init()
         {
             IxianHandler.init(Config.version, this, Config.networkType, false, Config.checksumLock);
 
             // Load or Generate the wallet
             if (!initWallet())
             {
-                running = false;
-                IxianHandler.forceShutdown = true;
-                return;
+                IxianHandler.shutdown();
+                return false;
             }
 
             Logging.info($"Initing Message Queue with Driver: {Config.mqDriver}");
             initMessageQueue();
 
             // Initialize storage
-            if (storage is null)
-            {
-                storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles);
-            }
+            storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles);
 
             activityStorage = new ActivityStorage(Config.activityFolderPath, Config.activityDbCacheSize, 0, RocksDBOptimizations.Mobiles);
 
@@ -72,6 +68,7 @@ namespace QuIXI.Meta
             // Network configuration
             networkClientManagerStatic = new NetworkClientManagerStatic(Config.maxRelaySectorNodesToConnectTo);
             NetworkClientManager.init(networkClientManagerStatic);
+            StreamClientManager.init(Config.maxConnectedStreamingNodes, true);
 
             // Prepare the stream processor
             streamProcessor = new StreamProcessor(new ICPendingMessageProcessor(Config.dataFolder, false), Config.streamCapabilities);
@@ -100,6 +97,8 @@ namespace QuIXI.Meta
             statsConsoleScreen = new StatsConsoleScreen();
 
             Logging.info("Node init done");
+
+            return true;
         }
 
         public void initMessageQueue()
@@ -125,16 +124,16 @@ namespace QuIXI.Meta
             messageQueue?.ConnectAsync();
         }
 
-        public void start(bool verboseConsoleOutput)
+        public bool start(bool verboseConsoleOutput)
         {
             if (running)
             {
-                return;
+                Logging.warn("Cannot start Node, it is already running.");
+                return false;
             }
             Logging.info("Starting node");
 
             running = true;
-            IxianHandler.forceShutdown = false;
             IxianHandler.status = NodeStatus.warmUp;
 
             // Start local storage
@@ -151,8 +150,7 @@ namespace QuIXI.Meta
             if (!storage.prepareStorage(false))
             {
                 Logging.error("Error while preparing block storage! Aborting.");
-                IxianHandler.forceShutdown = true;
-                return;
+                return false;
             }
 
             activityStorage.prepareStorage(false);
@@ -218,15 +216,17 @@ namespace QuIXI.Meta
             }
 
             connectToNetwork();
+
+            return true;
         }
 
         static public void connectToNetwork()
         {
+            // Start the s2 client manager
+            StreamClientManager.start();
+
             // Start the network client manager
             NetworkClientManager.start(2);
-
-            // Start the s2 client manager
-            StreamClientManager.start(Config.maxConnectedStreamingNodes, !Config.exposePublicIP, true);
         }
 
         // Handle timer routines
@@ -318,7 +318,7 @@ namespace QuIXI.Meta
             }
         }
 
-        public void stop()
+        private void stop()
         {
             if (!running)
             {
@@ -328,9 +328,20 @@ namespace QuIXI.Meta
             Logging.info("Stopping node...");
             running = false;
 
-            IxianHandler.status = NodeStatus.stopping;
+            // First stop localStorage, to flush any pending chat messages to storage
+            // The Node is currently in shutting down state, so no incoming messages will be processed by the message processors
+            IxianHandler.localStorage.stop();
+
+            // Stop the stream processor, it includes pending messages
+            streamProcessor.stop();
+
+            // Stop everything else storage related
+            activityStorage.stopStorage();
 
             PeerStorage.savePeersFile(true);
+
+            // Stop the block storage
+            storage.stopStorage();
 
             if (messageQueue != null)
             {
@@ -338,10 +349,7 @@ namespace QuIXI.Meta
                 messageQueue = null;
             }
 
-            // Stop the stream processor
-            streamProcessor.stop();
-
-            IxianHandler.localStorage.stop();
+            // Stop everything else
 
             // Stop TIV
             tiv.stop();
@@ -356,11 +364,8 @@ namespace QuIXI.Meta
                 apiServer = null;
             }
 
-            activityStorage.stopStorage();
-
-            // Stop the network queue
+            // Stop everything network related
             NetworkQueue.stop();
-
             NetworkClientManager.stop();
             StreamClientManager.stop();
 
@@ -372,11 +377,6 @@ namespace QuIXI.Meta
                 mainLoopThread.Join();
                 mainLoopThread = null;
             }
-
-            // Stop the block storage
-            storage.stopStorage();
-
-            IxianHandler.status = NodeStatus.stopped;
 
             Logging.info("Node stopped");
 
@@ -403,18 +403,6 @@ namespace QuIXI.Meta
                 return 0;
             }
             return block.blockNum;
-        }
-
-        public override ulong getHighestKnownNetworkBlockHeight()
-        {
-            ulong bh = getLastBlockHeight();
-            ulong netBlockNum = CoreProtocolMessage.determineHighestNetworkBlockNum();
-            if (bh < netBlockNum)
-            {
-                bh = netBlockNum;
-            }
-
-            return bh;
         }
 
         public override int getLastBlockVersion()
@@ -455,7 +443,7 @@ namespace QuIXI.Meta
                     Node.messageQueue.PublishAsync(MQTopics.Transaction, tx);
                     foreach (var address in relayNodeAddresses)
                     {
-                        NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, tx.getBytes(true, true), null);
+                        NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, tx.getBytes(true, true));
                     }
                     if (extendedAddresses != null)
                     {
@@ -608,7 +596,7 @@ namespace QuIXI.Meta
                         Console.Write("Enter wallet password: ");
                         password = ConsoleHelpers.getPasswordInput();
                     }
-                    if (IxianHandler.forceShutdown)
+                    if (password == "" || IxianHandler.forceShutdown)
                     {
                         return false;
                     }
