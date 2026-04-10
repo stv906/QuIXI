@@ -11,6 +11,10 @@ using IXICore.Storage;
 using IXICore.Streaming;
 using IXICore.Utils;
 using IXICore.Activity;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 
 namespace QuIXI.Meta
 {
@@ -59,9 +63,9 @@ namespace QuIXI.Meta
             initMessageQueue();
 
             // Initialize storage
-            storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles);
+            storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles, Config.minRequiredDiskSpace);
 
-            activityStorage = new ActivityStorage(Config.activityFolderPath, Config.activityDbCacheSize, 0, RocksDBOptimizations.Mobiles);
+            activityStorage = new ActivityStorage(Config.activityFolderPath, Config.activityDbCacheSize, 0, RocksDBOptimizations.Mobiles, Config.minRequiredDiskSpace);
 
             PeerStorage.init(Config.dataFolder);
 
@@ -381,6 +385,9 @@ namespace QuIXI.Meta
             Logging.info("Node stopped");
 
             statsConsoleScreen.stop();
+
+            // Stop logging
+            Logging.stop();
         }
 
         public override bool isAcceptingConnections()
@@ -523,7 +530,7 @@ namespace QuIXI.Meta
         {
             if (activityStorage is null)
             {
-                activityStorage = new ActivityStorage(Config.activityFolderPath, Config.activityDbCacheSize, 0, RocksDBOptimizations.Mobiles);
+                activityStorage = new ActivityStorage(Config.activityFolderPath, Config.activityDbCacheSize, 0, RocksDBOptimizations.Mobiles, Config.minRequiredDiskSpace);
             }
             activityStorage.stopStorage();
             activityStorage.deleteData();
@@ -531,7 +538,7 @@ namespace QuIXI.Meta
 
             if (storage is null)
             {
-                storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles);
+                storage = new RocksDBStorage(Config.headersFolderPath, Config.blocksDbCacheSize, CoreConfig.maxBlockHeadersPerDatabase, 3, RocksDBOptimizations.Mobiles, Config.minRequiredDiskSpace);
             }
             storage.stopStorage();
             storage.deleteData();

@@ -3,8 +3,12 @@ using QuIXI.MQ.Drivers;
 using IXICore.Meta;
 using IXICore.Network;
 using IXICore.Streaming;
-using System.Text;
 using IXICore;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
 
 namespace QuIXI.Meta
 {
@@ -78,6 +82,8 @@ namespace QuIXI.Meta
 
         public static TIVBlockVerificationMode blockVerificationMode = TIVBlockVerificationMode.Signatures;
         public static bool disableBlockPruning = false;
+
+        public static long minRequiredDiskSpace = 50 << 20; // 50MB
 
         private Config()
         {

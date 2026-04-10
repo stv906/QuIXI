@@ -3,6 +3,9 @@ using IXICore;
 using IXICore.Meta;
 using IXICore.Activity;
 using IXICore.Utils;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace QuIXI.Meta
 {

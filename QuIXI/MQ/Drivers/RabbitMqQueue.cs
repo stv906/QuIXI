@@ -2,7 +2,9 @@
 using IXICore.Meta;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using System;
 using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace QuIXI.MQ.Drivers
 {

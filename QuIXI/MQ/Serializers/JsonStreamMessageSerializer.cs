@@ -1,5 +1,6 @@
 ﻿using IXICore;
 using Newtonsoft.Json;
+using System.Collections.Generic;
 using System.Text;
 
 namespace QuIXI.MQ.Serializers

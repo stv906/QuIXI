@@ -6,6 +6,7 @@ using IXICore.Network;
 using IXICore.Streaming;
 using System.Text;
 using IXICore.Streaming.Models;
+using System;
 
 namespace QuIXI.Network
 {

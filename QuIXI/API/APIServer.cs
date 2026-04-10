@@ -1,6 +1,8 @@
 ﻿using QuIXI.Meta;
 using IXICore;
 using IXICore.Streaming;
+using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Text;
 
