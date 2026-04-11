@@ -27,9 +27,9 @@ namespace QuIXI.Network
 
             StreamMessage message = rdr.streamMessage;
             SpixiMessage spixi_message = rdr.spixiMessage;
-            Friend friend = rdr.friend;
+            Friend? friend = rdr.friend;
             Address sender_address = rdr.senderAddress;
-            Address real_sender_address = rdr.realSenderAddress;
+            Address? real_sender_address = rdr.realSenderAddress;
 
             if (friend != null)
             {
@@ -193,6 +193,10 @@ namespace QuIXI.Network
                         if (Node.addMessageWithType(message.id, FriendMessageType.standard, sender_address, spixi_message.channel, Encoding.UTF8.GetString(spixi_message.data), false, real_sender_address, message.timestamp, fireLocalNotification) != null)
                         {
                             Node.messageQueue.PublishAsync(MQTopics.Chat, message);
+                        }
+                        if (friend != null && !friend.bot)
+                        {
+                            sendReceivedConfirmation(friend, sender_address, message.id, spixi_message.channel);
                         }
                         break;
 

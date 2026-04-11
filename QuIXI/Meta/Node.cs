@@ -55,7 +55,7 @@ namespace QuIXI.Meta
             // Load or Generate the wallet
             if (!initWallet())
             {
-                IxianHandler.shutdown();
+                IxianHandler.requestShutdown();
                 return false;
             }
 

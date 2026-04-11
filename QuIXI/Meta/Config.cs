@@ -80,7 +80,7 @@ namespace QuIXI.Meta
         public static ulong activityDbCacheSize = 8 << 20;
         public static ulong blocksDbCacheSize = 8 << 20;
 
-        public static TIVBlockVerificationMode blockVerificationMode = TIVBlockVerificationMode.Signatures;
+        public static TIVBlockVerificationMode blockVerificationMode = TIVBlockVerificationMode.Minimal;
         public static bool disableBlockPruning = false;
 
         public static long minRequiredDiskSpace = 50 << 20; // 50MB

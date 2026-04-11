@@ -49,7 +49,7 @@ namespace QuIXI
                 ConsoleHelpers.verboseConsoleOutput = true;
                 Logging.consoleOutput = ConsoleHelpers.verboseConsoleOutput;
                 e.Cancel = true;
-                IxianHandler.shutdown();
+                IxianHandler.requestShutdown();
             };
 
             if (onStart(args))
@@ -116,7 +116,7 @@ namespace QuIXI
                         {
                             ConsoleHelpers.verboseConsoleOutput = true;
                             Logging.consoleOutput = ConsoleHelpers.verboseConsoleOutput;
-                            IxianHandler.shutdown();
+                            IxianHandler.requestShutdown();
                         }
 
                     }
