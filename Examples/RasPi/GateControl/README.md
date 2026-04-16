@@ -13,7 +13,7 @@ The device streams camera images, and accepts gate toggle commands in real time.
 * Internet connection
 * Camera accessible at `/root/cur.jpg`
 * Gate control connected to **GPIO pin 11**
-* .NET 8
+* .NET 10
 * Mosquitto MQTT
 
 ---
@@ -24,8 +24,8 @@ The device streams camera images, and accepts gate toggle commands in real time.
 sudo apt update
 sudo apt install -y curl git jq mosquitto mosquitto-clients
 
-# Install .NET 8
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 8.0 --version latest --verbose
+# Install .NET 10
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --version latest --verbose
 echo 'export DOTNET_ROOT=$HOME/.dotnet' >> ~/.bashrc
 echo 'export PATH=$PATH:$DOTNET_ROOT:$DOTNET_ROOT/tools' >> ~/.bashrc
 source ~/.bashrc
@@ -60,7 +60,7 @@ dotnet build -c Release
 ### Copy example ixian.cfg file to Release directory and edit if required
 
 ```bash
-cp ixian.cfg QuIXI/QuIXI/bin/Release/net8.0/
+cp ixian.cfg QuIXI/QuIXI/bin/Release/net10.0/
 ```
 
 ### Manual start

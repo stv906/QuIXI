@@ -7,5 +7,5 @@ cd /root
 /usr/bin/bash ixiAppProtocolHandler.sh &
 /usr/bin/bash ixiMessageHandler.sh &
 
-cd /root/QuIXI/QuIXI/bin/Release/net8.0/
+cd /root/QuIXI/QuIXI/bin/Release/net10.0/
 dotnet QuIXI.dll --walletPassword YOUR_WALLET_PASSWORD

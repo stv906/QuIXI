@@ -13,7 +13,7 @@ supporting basic system commands.
 * Raspberry Pi 2+ or Linux host
 * Internet connection
 * LM Studio running locally (default: `http://localhost:1234/v1/chat/completions`)
-* .NET 8
+* .NET 10
 * Mosquitto MQTT
 
 ---
@@ -24,8 +24,8 @@ supporting basic system commands.
 sudo apt update
 sudo apt install -y curl git jq mosquitto mosquitto-clients
 
-# Install .NET 8
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 8.0 --version latest --verbose
+# Install .NET 10
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --version latest --verbose
 echo 'export DOTNET_ROOT=$HOME/.dotnet' >> ~/.bashrc
 echo 'export PATH=$PATH:$DOTNET_ROOT:$DOTNET_ROOT/tools' >> ~/.bashrc
 source ~/.bashrc
@@ -59,7 +59,7 @@ dotnet build -c Release
 ### Copy example ixian.cfg file to Release directory and edit if required
 
 ```bash
-cp ixian.cfg QuIXI/QuIXI/bin/Release/net8.0/
+cp ixian.cfg QuIXI/QuIXI/bin/Release/net10.0/
 ```
 
 ### Manual start
