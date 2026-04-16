@@ -12,7 +12,7 @@ namespace QuIXI.Meta
     {
         private DateTime startTime;
 
-        private Thread thread = null;
+        private Thread thread;
         private bool running = false;
 
         private int consoleWidth = 55;
@@ -129,8 +129,8 @@ namespace QuIXI.Meta
             // Node status
             Console.Write(" Status:               ");
 
-            string dltStatus = "active";
-
+            string status = "active";
+            string statusDetail = "";
 
             string connectionsInStr = "-";  // Default to no inbound connections accepted
             if (NetworkServer.isRunning())
@@ -140,16 +140,29 @@ namespace QuIXI.Meta
             }
 
             if (connectionsIn + connectionsOut < 1)
-                dltStatus = "connecting   ";
+                status = "connecting   ";
 
-            if (IxianHandler.status == NodeStatus.stalled) // if node is stalled
+            ulong targetBlockHeight = IxianHandler.getHighestKnownNetworkBlockHeight();
+            ulong lastBlockHeight = IxianHandler.getLastBlockHeight();
+            if (lastBlockHeight + 10 < targetBlockHeight)
+            {
+                float syncPercent = 0;
+                if (targetBlockHeight > 0)
+                    syncPercent = 100.0f / targetBlockHeight * lastBlockHeight;
+
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                status = String.Format("synchronizing {0:0.00}%", syncPercent);
+                statusDetail = String.Format("                       target block {0}", targetBlockHeight);
+            }
+            else if (IxianHandler.status == NodeStatus.stalled)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                dltStatus = "No block received for over 30 minutes";
+                status = "No block received for over 30 minutes";
             }
 
-            writeLine(dltStatus);
+            writeLine(status);
             Console.ResetColor();
+            writeLine(statusDetail);
 
             writeLine("");
 

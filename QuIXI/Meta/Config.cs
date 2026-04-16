@@ -283,7 +283,14 @@ namespace QuIXI.Meta
                 {
                     continue;
                 }
-                Logging.info("Processing config parameter '" + key + "' = '" + value + "'");
+                if (key == "walletPassword")
+                {
+                    Logging.info("Processing config parameter '" + key + "' = '****************'");
+                }
+                else
+                {
+                    Logging.info("Processing config parameter '" + key + "' = '" + value + "'");
+                }
                 switch (key)
                 {
                     case "serverPort":

@@ -104,8 +104,7 @@ namespace QuIXI.Network
                                         {
                                             foreach (var pa in myPresence.addresses)
                                             {
-                                                byte[] hash = CryptoManager.lib.sha3_512sqTrunc(pa.getBytes());
-                                                var iika = new InventoryItemKeepAlive(hash, pa.lastSeenTime, myPresence.wallet, pa.device);
+                                                var iika = new InventoryItemKeepAlive2(pa.lastSeenTime, myPresence.wallet, pa.device);
                                                 endpoint.addInventoryItem(iika);
                                             }
                                         }
@@ -479,14 +478,14 @@ namespace QuIXI.Network
         private static void handleUpdatePresence(byte[] data, RemoteEndpoint endpoint)
         {
             // Parse the data and update entries in the presence list
-            Presence p = PresenceList.updateFromBytes(data, IxianHandler.getMinSignerPowDifficulty(IxianHandler.getLastBlockHeight(), IxianHandler.getLastBlockVersion(), 0));
+            Presence? p = PresenceList.updateFromBytes(data, IxianHandler.getMinSignerPowDifficulty(IxianHandler.getLastBlockHeight(), IxianHandler.getLastBlockVersion(), 0));
             if (p == null)
             {
                 return;
             }
 
             Logging.trace("Received presence update for " + p.wallet);
-            Friend f = FriendList.getFriend(p.wallet);
+            Friend? f = FriendList.getFriend(p.wallet);
             if (f != null)
             {
                 if (f.publicKey == null)
@@ -506,26 +505,25 @@ namespace QuIXI.Network
 
         private static void handleKeepAlivePresence(byte[] data, RemoteEndpoint endpoint)
         {
-            byte[] hash = CryptoManager.lib.sha3_512sqTrunc(data);
-
-            InventoryCache.Instance.setProcessedFlag(InventoryItemTypes.keepAlive, hash);
-
-            Address address = null;
+            Address address;
             long last_seen = 0;
-            byte[] device_id = null;
+            byte[] device_id;
             char node_type;
             bool updated = PresenceList.receiveKeepAlive(data, out address, out last_seen, out device_id, out node_type, endpoint);
+
+            InventoryCache.Instance.setProcessedFlag(InventoryItemTypes.keepAlive2, InventoryItemKeepAlive2.getHash(last_seen, address, device_id));
+
             if (!updated)
             {
                 return;
             }
 
             Logging.trace("Received keepalive update for " + address);
-            Presence p = PresenceList.getPresenceByAddress(address);
+            Presence? p = PresenceList.getPresenceByAddress(address);
             if (p == null)
                 return;
 
-            Friend f = FriendList.getFriend(p.wallet);
+            Friend? f = FriendList.getFriend(p.wallet);
             if (f != null)
             {
                 var pa = p.addresses[0];
@@ -585,7 +583,7 @@ namespace QuIXI.Network
                 var kaBytesAndOffset = data.ReadIxiBytes(offset);
                 offset += kaBytesAndOffset.bytesRead;
 
-                Presence p = PresenceList.updateFromBytes(kaBytesAndOffset.bytes, IxianHandler.getMinSignerPowDifficulty(IxianHandler.getLastBlockHeight(), IxianHandler.getLastBlockVersion(), 0));
+                Presence? p = PresenceList.updateFromBytes(kaBytesAndOffset.bytes, IxianHandler.getMinSignerPowDifficulty(IxianHandler.getLastBlockHeight(), IxianHandler.getLastBlockVersion(), 0));
                 if (p != null)
                 {
                     RelaySectors.Instance.addRelayNode(p.wallet);
@@ -684,7 +682,6 @@ namespace QuIXI.Network
                     if (item_count > (ulong)CoreConfig.maxInventoryItems)
                     {
                         Logging.warn("Received {0} inventory items, max items is {1}", item_count, CoreConfig.maxInventoryItems);
-                        item_count = (ulong)CoreConfig.maxInventoryItems;
                     }
 
                     ulong last_accepted_block_height = IxianHandler.getLastBlockHeight();
@@ -692,7 +689,7 @@ namespace QuIXI.Network
                     ulong network_block_height = IxianHandler.getHighestKnownNetworkBlockHeight();
 
                     Dictionary<ulong, List<InventoryItemSignature>> sig_lists = new Dictionary<ulong, List<InventoryItemSignature>>();
-                    List<InventoryItemKeepAlive> ka_list = new List<InventoryItemKeepAlive>();
+                    List<InventoryItemKeepAlive2> ka_list = new List<InventoryItemKeepAlive2>();
                     for (ulong i = 0; i < item_count; i++)
                     {
                         ulong len = reader.ReadIxiVarUInt();
@@ -721,15 +718,20 @@ namespace QuIXI.Network
                                 break;
                         }
 
-                        PendingInventoryItem pii = InventoryCache.Instance.add(item, endpoint, false);
+                        PendingInventoryItem? pii = InventoryCache.Instance.add(item, endpoint, false);
+                        if (pii == null)
+                        {
+                            Logging.warn("Error adding inventory item {0} to cache. Endpoint: {1}", item.type, endpoint.getFullAddress());
+                            continue;
+                        }
 
                         if (!pii.processed && pii.lastRequested == 0)
                         {
                             // first time we're seeing this inventory item
                             switch (item.type)
                             {
-                                case InventoryItemTypes.keepAlive:
-                                    var iika = (InventoryItemKeepAlive)item;
+                                case InventoryItemTypes.keepAlive2:
+                                    var iika = (InventoryItemKeepAlive2)item;
                                     if (PresenceList.getPresenceByAddress(iika.address) != null)
                                     {
                                         ka_list.Add(iika);

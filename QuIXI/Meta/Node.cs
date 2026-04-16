@@ -447,7 +447,7 @@ namespace QuIXI.Meta
             {
                 if (PendingTransactions.addOutgoingTransaction(tx, relayNodeAddresses))
                 {
-                    Node.messageQueue.PublishAsync(MQTopics.Transaction, tx);
+                    messageQueue.PublishAsync(MQTopics.Transaction, tx);
                     foreach (var address in relayNodeAddresses)
                     {
                         NetworkClientManager.sendToClient(address, ProtocolMessageCode.transactionData2, tx.getBytes(true, true));
