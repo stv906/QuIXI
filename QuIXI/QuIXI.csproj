@@ -45,7 +45,12 @@
     <CLSCompliant>true</CLSCompliant>
     <ComVisible>false</ComVisible>
   </PropertyGroup>
-  
+
+  <ItemGroup>
+    <None Include="runtimes/linux-arm/native/librocksdb.so" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="runtimes/linux-arm64/native/librocksdb.so" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+	
   <Target Name="CopyHTMLToOutput" AfterTargets="CoreCompile">
     <ItemGroup>
       <IXIPB1 Include="$(SolutionDir)\..\Ixian-Core\html\**\*.*" />
