@@ -67,6 +67,17 @@ namespace QuIXI.Meta
             Node.messageQueue.PublishAsync(MQTopics.TransactionStatusUpdate, obj);
         }
 
+        public void transactionCannotVerify(Transaction tx)
+        {
+            tx.applied = 0;
+            Node.activityStorage.updateStatus(tx.id, ActivityStatus.Unknown, 0);
+
+            var obj = new Dictionary<string, string>();
+            obj.Add(tx.getTxIdString(), "unknown");
+
+            Node.messageQueue.PublishAsync(MQTopics.TransactionStatusUpdate, obj);
+        }
+
         public void receivedBlockHeader(Block blockHeader, bool verified)
         {
             foreach (Balance balance in IxianHandler.balances.Values)
