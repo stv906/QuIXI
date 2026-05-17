@@ -6,7 +6,7 @@ namespace QuIXI.Meta
 {
     internal class ICLocalStorageCallbacks : LocalStorageCallbacks
     {
-        public void processMessage(FriendMessage friendMessage)
+        public void processMessage(Friend friend, int channel, FriendMessage friendMessage)
         {
         }
     }

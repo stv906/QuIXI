@@ -29,7 +29,7 @@ namespace QuIXI.Network
             SpixiMessage spixi_message = rdr.spixiMessage;
             Friend? friend = rdr.friend;
             Address sender_address = rdr.senderAddress;
-            Address? real_sender_address = rdr.realSenderAddress;
+            Address? group_sender_address = rdr.groupSenderAddress;
 
             if (friend != null)
             {
@@ -190,7 +190,7 @@ namespace QuIXI.Network
                         break;
 
                     case SpixiMessageCode.chat:
-                        if (Node.addMessageWithType(message.id, FriendMessageType.standard, sender_address, spixi_message.channel, Encoding.UTF8.GetString(spixi_message.data), false, real_sender_address, message.timestamp, fireLocalNotification) != null)
+                        if (Node.addMessageWithType(message.id, FriendMessageType.standard, sender_address, spixi_message.channel, Encoding.UTF8.GetString(spixi_message.data), false, group_sender_address, message.timestamp, fireLocalNotification) != null)
                         {
                             Node.messageQueue.PublishAsync(MQTopics.Chat, message);
                         }
