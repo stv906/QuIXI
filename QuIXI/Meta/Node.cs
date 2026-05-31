@@ -15,6 +15,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using IXICore.Streaming.Models;
 
 namespace QuIXI.Meta
 {
@@ -495,7 +496,13 @@ namespace QuIXI.Meta
 
         public static FriendMessage? addMessageWithType(byte[] id, FriendMessageType type, Address wallet_address, int channel, string message, bool local_sender = false, Address? sender_address = null, long timestamp = 0, bool fire_local_notification = true, int payable_data_len = 0)
         {
-            FriendMessage? friend_message = FriendList.addMessageWithType(id, type, wallet_address, channel, message, local_sender, sender_address, timestamp, fire_local_notification, payable_data_len);
+            return addMessageWithType(type, wallet_address, channel, new ChatStreamMessage(id, message, 0, false), local_sender, sender_address, timestamp, fire_local_notification, payable_data_len);
+        }
+
+        public static FriendMessage? addMessageWithType(FriendMessageType type, Address wallet_address, int channel, ChatStreamMessage chat_stream_message, bool local_sender = false, Address? sender_address = null, long timestamp = 0, bool fire_local_notification = true, int payable_data_len = 0)
+        {
+            var friend_message_with_status = FriendList.addMessageWithType(type, wallet_address, channel, chat_stream_message, local_sender, sender_address, timestamp, fire_local_notification, payable_data_len);
+            var friend_message = friend_message_with_status.message;
             if (friend_message != null)
             {
                 bool oldMessage = false;

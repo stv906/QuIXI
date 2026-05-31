@@ -196,7 +196,40 @@ namespace QuIXI.Network
                         }
                         if (friend != null && !friend.bot)
                         {
-                            sendReceivedConfirmation(friend, sender_address, message.id, spixi_message.channel);
+                            sendReceivedConfirmation(friend, message.id, spixi_message.channel);
+                        }
+                        break;
+
+                    case SpixiMessageCode.chatStream:
+                        {
+                            var csm = new ChatStreamMessage(spixi_message.data);
+                            var fm = Node.addMessageWithType(FriendMessageType.standard, sender_address, spixi_message.channel, csm, false, group_sender_address, message.timestamp, fireLocalNotification, 0);
+                            if (fm != null)
+                            {
+                                Node.messageQueue.PublishAsync(MQTopics.ChatStream, message);
+                            }
+                            if (friend != null && !friend.bot)
+                            {
+                                if (fm == null)
+                                {
+                                    fm = friend.getMessage(spixi_message.channel, csm.MessageId);
+                                    if (fm != null)
+                                    {
+                                        if (fm.sequence >= csm.Sequence)
+                                        {
+                                            // already have this message or a newer one, ignore
+                                            sendReceivedConfirmation(friend, message.id, spixi_message.channel);
+                                            return null;
+                                        }
+                                        else
+                                        {
+                                            // message is newer than what we have, with a sequence gap, wait for missing messages
+                                            return null;
+                                        }
+                                    }
+                                }
+                                sendReceivedConfirmation(friend, message.id, spixi_message.channel);
+                            }
                         }
                         break;
 

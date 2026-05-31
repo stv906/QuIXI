@@ -7,6 +7,7 @@ namespace QuIXI.MQ
     {
         // Protocol Messages
         public static readonly string Chat = "Chat";
+        public static readonly string ChatStream = "ChatStream";
         //public static readonly string GetNick = "GetNick";
         public static readonly string Nick = "Nick";
         //public static readonly string RequestAdd = "RequestAdd";
