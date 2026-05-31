@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Text;
+using IXICore.Streaming.Models;
 
 namespace QuIXI
 {
@@ -37,6 +38,11 @@ namespace QuIXI
             if (methodName.Equals("sendChatMessage", StringComparison.OrdinalIgnoreCase))
             {
                 response = onSendChatMessage(parameters);
+            }
+
+            if (methodName.Equals("sendChatStreamMessage", StringComparison.OrdinalIgnoreCase))
+            {
+                response = onSendChatStreamMessage(parameters);
             }
 
             if (methodName.Equals("sendSpixiMessage", StringComparison.OrdinalIgnoreCase))
@@ -77,7 +83,7 @@ namespace QuIXI
 
         private JsonResponse onAddContact(Dictionary<string, object> parameters)
         {
-            JsonError error = null;
+            JsonError? error = null;
 
             if (!parameters.ContainsKey("address"))
             {
@@ -85,9 +91,9 @@ namespace QuIXI
                 return new JsonResponse { result = null, error = error };
             }
 
-            Address address = new Address((string)parameters["address"]);
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
             var contactName = address.ToString();
-            Friend friend = FriendList.addFriend(FriendType.Normal, FriendState.RequestSent, address, null, contactName, null, null, 0);
+            Friend? friend = FriendList.addFriend(FriendType.Normal, FriendState.RequestSent, address, null, contactName, null, null, 0);
 
             if (friend != null)
             {
@@ -108,7 +114,7 @@ namespace QuIXI
 
         private JsonResponse onAcceptContact(Dictionary<string, object> parameters)
         {
-            JsonError error = null;
+            JsonError? error = null;
 
             if (!parameters.ContainsKey("address"))
             {
@@ -116,8 +122,8 @@ namespace QuIXI
                 return new JsonResponse { result = null, error = error };
             }
 
-            Address address = new Address((string)parameters["address"]);
-            Friend friend = FriendList.getFriend(address);
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
+            Friend? friend = FriendList.getFriend(address);
 
             if (friend == null)
             {
@@ -133,7 +139,7 @@ namespace QuIXI
 
         private JsonResponse onRemoveContact(Dictionary<string, object> parameters)
         {
-            JsonError error = null;
+            JsonError? error = null;
 
             if (!parameters.ContainsKey("address"))
             {
@@ -141,8 +147,8 @@ namespace QuIXI
                 return new JsonResponse { result = null, error = error };
             }
 
-            Address address = new Address((string)parameters["address"]);
-            Friend friend = FriendList.getFriend(address);
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
+            Friend? friend = FriendList.getFriend(address);
             if (friend == null || !FriendList.removeFriend(friend))
             {
                 error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "contact doesn't exist" };
@@ -155,7 +161,7 @@ namespace QuIXI
 
         private JsonResponse onSendChatMessage(Dictionary<string, object> parameters)
         {
-            JsonError error = null;
+            JsonError? error = null;
 
             if (!parameters.ContainsKey("address"))
             {
@@ -176,8 +182,8 @@ namespace QuIXI
                 return new JsonResponse { result = null, error = error };
             }
 
-            Address address = new Address((string)parameters["address"]);
-            Friend friend = FriendList.getFriend(address);
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
+            Friend? friend = FriendList.getFriend(address);
 
             if (friend == null)
             {
@@ -188,16 +194,86 @@ namespace QuIXI
             int channel = int.Parse((string)parameters["channel"]);
             string message = (string)parameters["message"];
 
-            FriendMessage friend_message = Node.addMessageWithType(null, FriendMessageType.standard, friend.walletAddress, channel, message, true, null, 0, true, UTF8Encoding.UTF8.GetBytes(message).Length);
+            FriendMessage? friend_message = Node.addMessageWithType(null, FriendMessageType.standard, friend.walletAddress, channel, message, true, null, 0, true, UTF8Encoding.UTF8.GetBytes(message).Length);
 
             CoreStreamProcessor.sendChatMessage(friend, friend_message, channel);
 
-            return new JsonResponse { result = friend, error = null };
+            return new JsonResponse { result = friend_message, error = null };
+        }
+
+        private JsonResponse onSendChatStreamMessage(Dictionary<string, object> parameters)
+        {
+            JsonError? error = null;
+
+            if (!parameters.ContainsKey("address"))
+            {
+                error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "address parameter is missing" };
+                return new JsonResponse { result = null, error = error };
+            }
+
+            if (!parameters.ContainsKey("message"))
+            {
+                error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "message parameter is missing" };
+                return new JsonResponse { result = null, error = error };
+            }
+
+            if (!parameters.ContainsKey("channel"))
+            {
+                error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "channel parameter is missing" };
+                return new JsonResponse { result = null, error = error };
+            }
+
+            bool isStream = false;
+            if (parameters.ContainsKey("isStream"))
+            {
+                isStream = bool.Parse((string)parameters["isStream"]);
+            }
+
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
+            Friend? friend = FriendList.getFriend(address);
+            int channel = int.Parse((string)parameters["channel"]);
+
+            byte[]? message_id = null;
+            int sequence = 0;
+            if (parameters.ContainsKey("messageId"))
+            {
+                message_id = Convert.FromBase64String((string)parameters["messageId"]);
+                if (parameters.ContainsKey("sequence"))
+                {
+                    sequence = int.Parse((string)parameters["sequence"]);
+                }
+                else
+                {
+                    var fm = friend.getMessage(channel, message_id);
+                    if (fm == null
+                        && sequence > 0)
+                    {
+                        error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "messageId doesn't exist or sequence is missing" };
+                        return new JsonResponse { result = null, error = error };
+                    }
+                    sequence = fm.sequence + 1;
+                }
+            }
+
+            if (friend == null)
+            {
+                error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "contact doesn't exist" };
+                return new JsonResponse { result = null, error = error };
+            }
+
+            string message = (string)parameters["message"];
+            var csm = new ChatStreamMessage(message_id, message, sequence, isStream);
+            FriendMessage? friend_message = Node.addMessageWithType(FriendMessageType.standard, friend.walletAddress, channel, csm, true, null, 0, true, UTF8Encoding.UTF8.GetBytes(message).Length);
+            csm.MessageId = friend_message.id;
+
+            CoreStreamProcessor.sendChatStreamMessage(friend, csm, channel);
+
+            return new JsonResponse { result = friend_message, error = null };
         }
 
         private JsonResponse onSendSpixiMessage(Dictionary<string, object> parameters)
         {
-            JsonError error = null;
+            JsonError? error = null;
 
             if (!parameters.ContainsKey("address"))
             {
@@ -223,8 +299,8 @@ namespace QuIXI
                 return new JsonResponse { result = null, error = error };
             }
 
-            Address address = new Address((string)parameters["address"]);
-            Friend friend = FriendList.getFriend(address);
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
+            Friend? friend = FriendList.getFriend(address);
 
             if (friend == null)
             {
@@ -245,7 +321,7 @@ namespace QuIXI
         private JsonResponse onSendAppData(Dictionary<string, object> parameters)
         {
             // TOOD Add multi addresses
-            JsonError error = null;
+            JsonError? error = null;
 
             if (!parameters.ContainsKey("address"))
             {
@@ -275,8 +351,8 @@ namespace QuIXI
                 return new JsonResponse { result = null, error = error };
             }
 
-            Address address = new Address((string)parameters["address"]);
-            Friend friend = FriendList.getFriend(address);
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
+            Friend? friend = FriendList.getFriend(address);
 
             if (friend == null)
             {
@@ -299,7 +375,7 @@ namespace QuIXI
 
         private JsonResponse onGetLastMessages(Dictionary<string, object> parameters)
         {
-            JsonError error = null;
+            JsonError? error = null;
 
             if (!parameters.ContainsKey("address"))
             {
@@ -319,8 +395,8 @@ namespace QuIXI
                 channel = int.Parse((string)parameters["channel"]);
             }
 
-            Address address = new Address((string)parameters["address"]);
-            Friend friend = FriendList.getFriend(address);
+            Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
+            Friend? friend = FriendList.getFriend(address);
             if (friend == null)
             {
                 error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "contact doesn't exist" };
