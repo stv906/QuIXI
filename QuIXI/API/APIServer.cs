@@ -245,13 +245,18 @@ namespace QuIXI
                 else
                 {
                     var fm = friend.getMessage(channel, message_id);
-                    if (fm == null
-                        && sequence > 0)
+                    if (fm == null)
                     {
-                        error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "messageId doesn't exist or sequence is missing" };
-                        return new JsonResponse { result = null, error = error };
+                        if (sequence > 0)
+                        {
+                            error = new JsonError { code = (int)RPCErrorCode.RPC_INVALID_PARAMS, message = "messageId doesn't exist or sequence is missing" };
+                            return new JsonResponse { result = null, error = error };
+                        }
                     }
-                    sequence = fm.sequence + 1;
+                    else
+                    {
+                        sequence = fm.sequence + 1;
+                    }
                 }
             }
 

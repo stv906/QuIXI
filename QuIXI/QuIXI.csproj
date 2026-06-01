@@ -40,7 +40,7 @@
     <AssemblyCompany>Ixian</AssemblyCompany>
     <Product>QuIXI</Product>
     <Copyright>Copyright © 2026 Ixian</Copyright>
-    <VersionPrefix>0.9.2.1</VersionPrefix>
+    <VersionPrefix>0.9.3.0</VersionPrefix>
     <PackageProjectUrl>https://www.ixian.io</PackageProjectUrl>
     <CLSCompliant>true</CLSCompliant>
     <ComVisible>false</ComVisible>
