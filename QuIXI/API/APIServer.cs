@@ -304,6 +304,31 @@ namespace QuIXI
                 return new JsonResponse { result = null, error = error };
             }
 
+            bool addToPendingMessages = false;
+            bool sendToServer = false;
+            bool sendPushNotification = false;
+            bool removeAfterSending = true;
+
+            if (parameters.ContainsKey("addToPendingMessages"))
+            {
+                addToPendingMessages = bool.Parse((string)parameters["addToPendingMessages"]);
+            }
+
+            if (parameters.ContainsKey("sendToServer"))
+            {
+                sendToServer = bool.Parse((string)parameters["sendToServer"]);
+            }
+
+            if (parameters.ContainsKey("sendPushNotification"))
+            {
+                sendPushNotification = bool.Parse((string)parameters["sendPushNotification"]);
+            }
+
+            if (parameters.ContainsKey("removeAfterSending"))
+            {
+                removeAfterSending = bool.Parse((string)parameters["removeAfterSending"]);
+            }
+
             Address address = new ExtendedAddress((string)parameters["address"]).RoutingAddress;
             Friend? friend = FriendList.getFriend(address);
 
@@ -317,7 +342,14 @@ namespace QuIXI
             byte[] data = Crypto.stringToHash((string)parameters["data"]);
             int channel = int.Parse((string)parameters["channel"]);
 
-            CoreStreamProcessor.sendSpixiMessage(friend, new SpixiMessage(type, data, channel));
+            CoreStreamProcessor.sendSpixiMessage(friend,
+                                                 new SpixiMessage(type, data, channel),
+                                                 null,
+                                                 null,
+                                                 addToPendingMessages,
+                                                 sendToServer,
+                                                 sendPushNotification,
+                                                 removeAfterSending);
 
             return new JsonResponse { result = friend, error = null };
         }

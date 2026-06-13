@@ -75,7 +75,7 @@ namespace QuIXI.Meta
         // expose own external IP:Port to PL
         public static bool exposePublicIP = false;
 
-        public static StreamCapabilities streamCapabilities = StreamCapabilities.Incoming | StreamCapabilities.AppProtocols;
+        public static StreamCapabilities streamCapabilities = StreamCapabilities.Incoming | StreamCapabilities.AppProtocols | StreamCapabilities.GroupCapabilites;
 
         public static ulong activityDbCacheSize = 8 << 20;
         public static ulong blocksDbCacheSize = 8 << 20;
