@@ -15,7 +15,7 @@ namespace QuIXI.Meta
     public class Config
     {
         // Read-only values
-        public static readonly string version = "qxc-0.9.3";
+        public static readonly string version = "qxc-0.9.4";
 
         public static readonly string checkVersionUrl = "https://resources.ixian.io/qxc-update.txt";
         public static readonly int checkVersionSeconds = 6 * 60 * 60; // 6 hours
@@ -485,7 +485,7 @@ namespace QuIXI.Meta
 
             // Debug
 
-            cmd_parser.Setup<string>("walletPassword").Callback(value => dangerCommandlinePasswordCleartextUnsafe = value).SetDefault("");
+            cmd_parser.Setup<string>("walletPassword").Callback(value => dangerCommandlinePasswordCleartextUnsafe = value).Required();
 
             cmd_parser.Setup<int>("logVerbosity").Callback(value => logVerbosity = value).Required();
 
