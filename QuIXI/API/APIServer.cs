@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text;
 using IXICore.Streaming.Models;
+using IXICore.Meta;
 
 namespace QuIXI
 {
@@ -268,7 +269,7 @@ namespace QuIXI
 
             string message = (string)parameters["message"];
             var csm = new ChatStreamMessage(message_id, message, sequence, isStream);
-            FriendMessage? friend_message = Node.addMessageWithType(FriendMessageType.standard, friend.walletAddress, channel, csm, true, null, 0, true, UTF8Encoding.UTF8.GetBytes(message).Length);
+            FriendMessage? friend_message = Node.addMessageWithType(FriendMessageType.standard, friend.walletAddress, channel, csm, true, IxianHandler.primaryWalletAddress, 0, true, UTF8Encoding.UTF8.GetBytes(message).Length);
             csm.MessageId = friend_message.id;
 
             CoreStreamProcessor.sendChatStreamMessage(friend, csm, channel);
